@@ -89,7 +89,7 @@ export type BackgroundRequest =
   | { type: "family:sharing"; on: boolean }
   | { type: "family:disconnect" }
   | { type: "family:event"; event: FamilyEvent }
-  | { type: "family:ask-approval"; site: string; amount: string | null; reasons: string[] }
+  | { type: "family:ask-approval"; site: string; amount: string | null; reasons: string[]; ageDays: number | null }
   | { type: "family:approval-status"; approvalId: string };
 
 /** The ONLY kinds of things Nudi may share with family. No pages, no typing, no history. */

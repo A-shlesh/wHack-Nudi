@@ -1,0 +1,71 @@
+<!doctype html>
+<!--
+  Nudi family dashboard. Opened on the family member's phone at /dashboard.
+  Screens: 1) pair with a 6-digit code  2) wait for the elder to allow
+           3) live feed with payment requests (Approve / Block)
+  Plain HTML + CSS + JS, no framework. Logic is in app.js.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0f5257" />
+    <title>Nudi Family</title>
+    <link rel="icon" href="icon.png" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <img src="icon.png" alt="" width="40" height="40" />
+      <div>
+        <div class="brand">Nudi Family</div>
+        <div class="sub" id="subtitle">Help your family stay safe online</div>
+      </div>
+    </header>
+
+    <!-- Screen 1: pairing -->
+    <main id="pair-screen" class="screen" hidden>
+      <h1>Connect to your family member</h1>
+      <p>On their computer, they open Nudi and tap <strong>Connect family</strong>. Type the 6-digit code they see.</p>
+      <form id="pair-form" class="card">
+        <label for="name">Your name</label>
+        <input id="name" value="Sushant" maxlength="40" autocomplete="given-name" required />
+        <label for="code">6-digit code</label>
+        <input id="code" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="123456" autocomplete="one-time-code" required />
+        <button class="btn primary" type="submit">Connect</button>
+        <p class="error" id="pair-error" role="alert"></p>
+      </form>
+      <p class="privacy">You will only see what Nudi helped with: warnings, removed extras, and payments. Never the pages they visit or anything they type.</p>
+    </main>
+
+    <!-- Screen 2: waiting for the elder to tap Allow -->
+    <main id="wait-screen" class="screen" hidden>
+      <div class="card center">
+        <div class="spinner"></div>
+        <h1 id="wait-title">Waiting for them to allow…</h1>
+        <p>Nudi is asking on their screen: "<span id="wait-name">You</span> wants to connect. Allow?"</p>
+      </div>
+    </main>
+
+    <!-- Screen 3: the feed -->
+    <main id="feed-screen" class="screen" hidden>
+      <div id="sharing" class="pill"></div>
+
+      <section class="summary" aria-label="This week">
+        <div class="tile"><div class="num" id="sum-tasks">0</div><div class="label">tasks done</div></div>
+        <div class="tile"><div class="num" id="sum-blocked">0</div><div class="label">payments stopped</div></div>
+        <div class="tile"><div class="num" id="sum-saved">₹0</div><div class="label">money saved</div></div>
+      </section>
+
+      <section id="approvals" aria-live="polite"></section>
+
+      <h2>Activity</h2>
+      <ul id="events" class="events"></ul>
+      <p id="empty" class="muted" hidden>Nothing yet. Activity appears here when Nudi helps.</p>
+
+      <button id="unlink" class="link">Disconnect this phone</button>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

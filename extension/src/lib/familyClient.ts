@@ -38,7 +38,7 @@ async function refresh(state: FamilyState): Promise<FamilyState> {
       "/family/pair/status",
       state.elderToken,
     );
-    if (reply.status === "expired" || reply.status === "rejected") return save({ ...DEFAULT_STATE, elderName: state.elderName });
+    if (reply.status === "expired" || reply.status === "rejected" || reply.status === "unpaired") return save({ ...DEFAULT_STATE, elderName: state.elderName });
     return save({
       ...state,
       status: reply.status as FamilyState["status"],
@@ -55,9 +55,13 @@ function canShare(state: FamilyState): boolean {
   return state.status === "paired" && state.sharingOn && state.elderToken !== null;
 }
 
-/** Turn an event into the small JSON the backend accepts. */
+/** Copy ONLY the allowed fields of an event, nothing else. */
 function eventBody(event: FamilyEvent): Record<string, unknown> {
-  return { ...event };
+  const body: Record<string, unknown> = { kind: event.kind };
+  if ("level" in event) body.level = event.level;
+  if ("amount" in event) body.amount = event.amount;
+  if ("amount_saved" in event) body.amount_saved = event.amount_saved;
+  return body;
 }
 
 export async function handleFamily(request: BackgroundRequest): Promise<unknown> {
@@ -93,6 +97,8 @@ export async function handleFamily(request: BackgroundRequest): Promise<unknown>
     }
 
     case "family:disconnect":
+      // Tell the backend first, so the family member's access really ends.
+      if (state.elderToken) await postForJson("/family/unpair", {}, state.elderToken).catch(() => {});
       return save({ ...DEFAULT_STATE, elderName: state.elderName });
 
     case "family:event":
@@ -103,7 +109,8 @@ export async function handleFamily(request: BackgroundRequest): Promise<unknown>
       if (state.status !== "paired" || !state.sharingOn) throw new Error("Family is not connected");
       return postForJson<{ approval_id: string }>(
         "/approvals",
-        { site: request.site, amount: request.amount, reasons: request.reasons },
+        // The backend writes the reasons itself from the site and its age.
+        { site: request.site, amount: request.amount, age_days: request.ageDays },
         state.elderToken!,
       );
     }

@@ -11,11 +11,10 @@ Then: under 40 = "danger", 40 to 69 = "caution", 70 and up = "safe".
 
 Demo pages run on localhost, which has no real domain to check. They can
 pretend to be a website (domain + age) with two <meta> tags, read by the
-extension. That is ONLY accepted when the page really is on localhost (or a
-host listed in NUDI_DEMO_HOSTS), so a real scam site cannot use it.
+extension. That is ONLY accepted when the page really is on localhost, or is
+served by this same Nudi backend (the AWS demo), so a real scam site cannot use it.
 """
 
-import os
 from urllib.parse import urlparse
 
 from .schemas import TrustReason, TrustRequest, TrustResponse
@@ -28,9 +27,6 @@ DANGER_BELOW = 40
 CAUTION_BELOW = 70
 BRAND_PENALTY = 65  # pretending to be a bank or shop is serious enough on its own
 
-# Extra hosts allowed to use demo tags, for example the AWS demo address.
-_DEMO_HOSTS = {h.strip() for h in os.getenv("NUDI_DEMO_HOSTS", "").split(",") if h.strip()}
-
 
 def level_for(score: int) -> str:
     if score < DANGER_BELOW:
@@ -40,7 +36,7 @@ def level_for(score: int) -> str:
     return "safe"
 
 
-def _age_reasons(age_days: int | None) -> tuple[int, list[TrustReason]]:
+def age_reasons(age_days: int | None) -> tuple[int, list[TrustReason]]:
     if age_days is None:
         return 10, [TrustReason(code="AGE_UNKNOWN", message_simple="I couldn't check how old this website is.")]
     if age_days < NEW_DAYS:
@@ -53,7 +49,7 @@ def _age_reasons(age_days: int | None) -> tuple[int, list[TrustReason]]:
     return 0, []
 
 
-def _lookalike_reasons(domain: str, host: str) -> tuple[int, list[TrustReason], str | None]:
+def lookalike_reasons(domain: str, host: str) -> tuple[int, list[TrustReason], str | None]:
     result = lookalike.check(domain, host)
     if result.kind == "official":
         brand = result.brand["display"]
@@ -73,10 +69,11 @@ def _lookalike_reasons(domain: str, host: str) -> tuple[int, list[TrustReason], 
     return 0, [], None
 
 
-def check_trust(request: TrustRequest) -> TrustResponse:
+def check_trust(request: TrustRequest, own_host: str = "") -> TrustResponse:
+    """own_host = the host name this backend is reached on (demo pages live there too)."""
     parts = urlparse(request.url)
     host = host_of(request.url)
-    demo_allowed = (is_local(host) or host in _DEMO_HOSTS) and bool(request.demo_domain)
+    demo_allowed = (is_local(host) or (own_host != "" and host == own_host)) and bool(request.demo_domain)
 
     # A local test page that is not pretending to be anything: nothing to check.
     if is_local(host) and not demo_allowed:
@@ -95,8 +92,8 @@ def check_trust(request: TrustRequest) -> TrustResponse:
         age_days = age.lookup_age_days(domain)
         https = https_check.check(parts.scheme, request.has_payment, request.has_login)
 
-    age_penalty, reasons = _age_reasons(age_days)
-    brand_penalty, brand_reasons, lookalike_of = _lookalike_reasons(domain, host)
+    age_penalty, reasons = age_reasons(age_days)
+    brand_penalty, brand_reasons, lookalike_of = lookalike_reasons(domain, host)
     reasons += brand_reasons
     if https.code:
         reasons.append(TrustReason(code=https.code, message_simple=https.message))

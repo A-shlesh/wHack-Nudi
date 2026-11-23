@@ -194,6 +194,7 @@ export async function confirmPayment(actionLabel: string): Promise<boolean> {
           site,
           amount,
           reasons: (pageTrust?.reasons ?? []).map((r) => r.message_simple),
+          ageDays: pageTrust?.domain_age_days ?? null,
         });
         polling = window.setInterval(async () => {
           const status = await askBackground<ApprovalStatus>({ type: "family:approval-status", approvalId: approval_id }).catch(

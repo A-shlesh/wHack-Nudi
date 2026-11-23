@@ -20,3 +20,11 @@ Thumbs.db
 
 # Local test harness (not part of the product)
 demo/_tmp/
+
+# Family Link local database
+backend/nudi.db
+
+# AWS SAM (build output, and saved deploy settings that may hold secrets)
+.aws-sam/
+samconfig.toml
+backend/static/

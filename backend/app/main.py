@@ -8,17 +8,19 @@ Endpoints:
   POST /trust     -> a website address in, a trust score with simple reasons out
   POST /speak     -> text in, MP3 audio out (or 204 = "use the browser voice")
   GET  /demo/     -> fake demo websites for testing the extension
+  /family/..., /events, /approvals/...  -> Family Link (see family.py)
+  GET  /dashboard/ -> the family dashboard (phone-friendly web page)
 
 Run it with:  uvicorn app.main:app --reload --port 8787
 """
 
 from pathlib import Path
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import config
+from . import config, family
 from .privacy import redact, safe_url
 from .risk_rules import check_page, is_payment_label
 from .domain_trust import check_trust
@@ -39,9 +41,22 @@ app = FastAPI(title="Nudi backend")
 # Fine for a local prototype; lock this down before any real deployment.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# Serve the demo web pages (the fake, cluttered sites we test Nudi on) at /demo.
-_DEMO_FOLDER = Path(__file__).resolve().parents[2] / "demo"
-app.mount("/demo", StaticFiles(directory=_DEMO_FOLDER, html=True), name="demo")
+# Family Link: pairing, events, approvals, dashboard feed (see family.py).
+app.include_router(family.router)
+
+# Serve the demo web pages (the fake, cluttered sites we test Nudi on) at /demo,
+# and the family dashboard (plain HTML/CSS/JS) at /dashboard.
+# Locally they are in the repo folders; on AWS they are copied into backend/static/.
+_BACKEND = Path(__file__).resolve().parents[1]
+
+
+def _static_folder(name: str) -> Path:
+    in_repo = _BACKEND.parent / name
+    return in_repo if in_repo.exists() else _BACKEND / "static" / name
+
+
+app.mount("/demo", StaticFiles(directory=_static_folder("demo"), html=True), name="demo")
+app.mount("/dashboard", StaticFiles(directory=_static_folder("family-dashboard"), html=True), name="dashboard")
 
 
 @app.get("/health")
@@ -102,8 +117,9 @@ def ask(request: AskRequest):
 
 
 @app.post("/trust", response_model=TrustResponse)
-def trust(request: TrustRequest):
-    return check_trust(request)
+def trust(request: TrustRequest, http: Request):
+    # Demo pages are served by this backend, so its own host may use demo tags.
+    return check_trust(request, own_host=http.url.hostname or "")
 
 
 @app.post("/speak")

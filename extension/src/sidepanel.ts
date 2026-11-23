@@ -37,6 +37,7 @@ document.body.append(app);
 let currentTabId: number | null = null;
 let familySharing: boolean | null = null; // for the header badge
 let lastSpokenUrl = "";
+let lastTaskSite = ""; // send "task started" once per website, not on every page
 
 // ---------- Talking to the page ----------
 
@@ -230,7 +231,11 @@ async function analyze(quiet = false): Promise<void> {
     render(read, result, trust);
 
     // Family Link events: only that a task started and the warning level. No page details.
-    askBackground({ type: "family:event", event: { kind: "task_started" } }).catch(() => {});
+    const site = trust?.domain ?? read.page.url;
+    if (site !== lastTaskSite) {
+      lastTaskSite = site;
+      askBackground({ type: "family:event", event: { kind: "task_started" } }).catch(() => {});
+    }
     const worst = trust?.level === "danger" || result.warnings.some((w) => w.level === "danger") ? "danger"
       : trust?.level === "caution" || result.warnings.some((w) => w.level === "caution") ? "caution" : null;
     if (worst) askBackground({ type: "family:event", event: { kind: "warning_shown", level: worst } }).catch(() => {});

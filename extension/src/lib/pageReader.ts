@@ -3,6 +3,7 @@
 // can find and click it again later from the Action View.
 
 import type { PageElement, PageSnapshot } from "../types";
+import { BACKEND_URL } from "../config";
 import { isPrivateField, redactText } from "./sanitize";
 
 const MAX_ELEMENTS = 150;
@@ -113,12 +114,13 @@ export function pageHasLogin(): boolean {
  * They pretend to be a real website with two tags:
  *   <meta name="nudi-demo-domain" content="bescom-bill-pay-offer.co">
  *   <meta name="nudi-demo-domain-age-days" content="9">
- * We ONLY read these on localhost. A real website could otherwise use them
- * to pretend to be a trusted bank.
+ * We ONLY read these on localhost or on the Nudi backend's own demo pages
+ * (for the AWS demo). A real website could otherwise use them to pretend to
+ * be a trusted bank. The backend checks this again.
  */
 export function readDemoDomain(): { domain: string | null; ageDays: number | null } {
-  const isLocal = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
-  if (!isLocal) return { domain: null, ageDays: null };
+  const demoHosts = ["localhost", "127.0.0.1", "[::1]", new URL(BACKEND_URL).hostname];
+  if (!demoHosts.includes(location.hostname)) return { domain: null, ageDays: null };
   const domain = document.querySelector<HTMLMetaElement>('meta[name="nudi-demo-domain"]')?.content || null;
   const age = document.querySelector<HTMLMetaElement>('meta[name="nudi-demo-domain-age-days"]')?.content;
   return { domain, ageDays: age ? Number(age) : null };
