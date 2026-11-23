@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Nudi - Simple Web Helper",
+  "version": "0.1.0",
+  "description": "Turns busy websites into a few big, simple buttons. Warns about scams. Always asks before you pay.",
+  "action": {
+    "default_title": "Nudi: help me with this page",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["http://localhost:8787/*"]
+}
