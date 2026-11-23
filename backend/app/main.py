@@ -5,6 +5,7 @@ Endpoints:
   GET  /health    -> is the server up, and which services are real or mock
   POST /simplify  -> page summary in, Action View (summary, big buttons, warnings) out
   POST /ask       -> a question about the page in, a short plain answer out
+  POST /trust     -> a website address in, a trust score with simple reasons out
   POST /speak     -> text in, MP3 audio out (or 204 = "use the browser voice")
   GET  /demo/     -> fake demo websites for testing the extension
 
@@ -20,7 +21,16 @@ from fastapi.staticfiles import StaticFiles
 from . import config
 from .privacy import redact, safe_url
 from .risk_rules import check_page, is_payment_label
-from .schemas import AskRequest, AskResponse, PageSnapshot, SimplifyResponse, SpeakRequest
+from .domain_trust import check_trust
+from .schemas import (
+    AskRequest,
+    AskResponse,
+    PageSnapshot,
+    SimplifyResponse,
+    SpeakRequest,
+    TrustRequest,
+    TrustResponse,
+)
 from .services import bedrock_ai, mock_ai, mock_answers, voice
 
 app = FastAPI(title="Nudi backend")
@@ -89,6 +99,11 @@ def ask(request: AskRequest):
         except Exception as error:  # any failure -> keep the demo running with mock
             print(f"Bedrock failed, using mock instead: {error}")
     return AskResponse(answer=mock_answers.answer(question, request.page), mode="mock")
+
+
+@app.post("/trust", response_model=TrustResponse)
+def trust(request: TrustRequest):
+    return check_trust(request)
 
 
 @app.post("/speak")

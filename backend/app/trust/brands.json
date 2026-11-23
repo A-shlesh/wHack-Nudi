@@ -1,0 +1,14 @@
+[
+  { "name": "sbi", "display": "SBI (State Bank of India)", "official": ["sbi.co.in", "onlinesbi.sbi", "sbi.bank.in", "sbi"] },
+  { "name": "hdfcbank", "display": "HDFC Bank", "official": ["hdfcbank.com", "hdfc.bank.in"] },
+  { "name": "icicibank", "display": "ICICI Bank", "official": ["icicibank.com", "icici.bank.in"] },
+  { "name": "axisbank", "display": "Axis Bank", "official": ["axisbank.com", "axis.bank.in"] },
+  { "name": "irctc", "display": "IRCTC", "official": ["irctc.co.in"] },
+  { "name": "bescom", "display": "BESCOM", "official": ["bescom.co.in", "bescom.karnataka.gov.in"] },
+  { "name": "paytm", "display": "Paytm", "official": ["paytm.com", "paytm.in"] },
+  { "name": "phonepe", "display": "PhonePe", "official": ["phonepe.com"] },
+  { "name": "amazon", "display": "Amazon", "official": ["amazon.in", "amazon.com", "amazonaws.com"] },
+  { "name": "flipkart", "display": "Flipkart", "official": ["flipkart.com"] },
+  { "name": "uidai", "display": "UIDAI (Aadhaar)", "official": ["uidai.gov.in"] },
+  { "name": "incometax", "display": "Income Tax Department", "official": ["incometax.gov.in"] }
+]

@@ -45,16 +45,24 @@ function kindOf(element: HTMLElement): PageElement["kind"] {
   return "button";
 }
 
+// Things we leave out of the page text:
+//   - anything the user can type into (privacy)
+//   - code and Nudi's own parts
+//   - adverts: an ad saying "You won a prize!" does not make the BILL page a scam
+const SKIP_IN_TEXT = [
+  "input", "textarea", "select", "[contenteditable]", "script", "style", "noscript",
+  "#nudi-root", "#nudi-confirm", "#nudi-spotlight",
+  ".ad", ".ads", ".advert", "[class*='advert']", "[class*='sponsor']", "[id^='ad-']", "[id*='google_ads']",
+  "ins.adsbygoogle", "iframe", "[aria-label*='advert' i]",
+].join(", ");
+
 /**
- * The visible page text, WITHOUT anything the user typed.
- * We copy the page and delete text boxes and editable areas (draft emails,
- * chat boxes) from the copy before reading it.
+ * The visible page text, WITHOUT anything the user typed and without adverts.
+ * We copy the page and delete those parts from the copy before reading it.
  */
 function safePageText(): string {
   const copy = document.body.cloneNode(true) as HTMLElement;
-  copy
-    .querySelectorAll("input, textarea, select, [contenteditable], script, style, noscript, #nudi-root, #nudi-confirm")
-    .forEach((node) => node.remove());
+  copy.querySelectorAll(SKIP_IN_TEXT).forEach((node) => node.remove());
   const text = (copy.textContent || "").replace(/\s+/g, " ");
   return redactText(text).slice(0, MAX_TEXT_LENGTH);
 }
@@ -93,6 +101,27 @@ export function readPage(): PageSnapshot {
     text: safePageText(),
     elements,
   };
+}
+
+/** True if the page asks for a password (a login form). */
+export function pageHasLogin(): boolean {
+  return document.querySelector("input[type=password]") !== null;
+}
+
+/**
+ * Demo pages run on localhost, which cannot be looked up on the internet.
+ * They pretend to be a real website with two tags:
+ *   <meta name="nudi-demo-domain" content="bescom-bill-pay-offer.co">
+ *   <meta name="nudi-demo-domain-age-days" content="9">
+ * We ONLY read these on localhost. A real website could otherwise use them
+ * to pretend to be a trusted bank.
+ */
+export function readDemoDomain(): { domain: string | null; ageDays: number | null } {
+  const isLocal = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
+  if (!isLocal) return { domain: null, ageDays: null };
+  const domain = document.querySelector<HTMLMetaElement>('meta[name="nudi-demo-domain"]')?.content || null;
+  const age = document.querySelector<HTMLMetaElement>('meta[name="nudi-demo-domain-age-days"]')?.content;
+  return { domain, ageDays: age ? Number(age) : null };
 }
 
 /** Find an element again by the id we gave it in readPage(). */

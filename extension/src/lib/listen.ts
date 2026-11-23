@@ -31,7 +31,11 @@ let active: Recognition | null = null;
  * Start listening. Calls onText with what the user said, then onDone when
  * listening stops (after speech, silence, an error, or stopListening()).
  */
-export function listenOnce(onText: (text: string) => void, onDone: () => void): void {
+export function listenOnce(
+  onText: (text: string) => void,
+  onDone: () => void,
+  onBlocked: () => void = () => {}, // the microphone was not allowed
+): void {
   const RecognitionClass = getRecognitionClass();
   if (!RecognitionClass) {
     onDone();
@@ -43,7 +47,10 @@ export function listenOnce(onText: (text: string) => void, onDone: () => void): 
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
   recognition.onresult = (event) => onText(event.results[0][0].transcript);
-  recognition.onerror = (event) => console.warn("Nudi voice:", event.error);
+  recognition.onerror = (event) => {
+    console.warn("Nudi voice:", event.error);
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") onBlocked();
+  };
   recognition.onend = () => {
     active = null;
     onDone();

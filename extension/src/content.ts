@@ -1,42 +1,77 @@
-// Content script: injected into the current tab when the user clicks
-// "Help me with this page" in the Nudi popup (or presses Alt+Shift+N).
-// Steps: load the user's settings -> turn on the payment guard -> read the
-// page safely -> ask the backend to simplify it -> show the side panel.
+// Content script: loaded into every web page (see manifest.json).
+// It does NOTHING with the page until the Nudi side panel asks. Then it can:
+//   nudi:read       read the page safely (no passwords, no typed text, no ads)
+//   nudi:run        do what a big choice says (payments always ask first)
+//   nudi:show-me    dim the page and point at one button
+//   nudi:fix        untick a sneaky extra
+//   nudi:set-trust  remember the website's trust result for the payment guard
+// The payment guard is always on: it stops ANY "Pay" click to ask first.
 
-import { closeView, showActionView, showMessage } from "./lib/actionView";
 import { askBackground } from "./lib/messages";
-import { readPage } from "./lib/pageReader";
-import { installPageGuard } from "./lib/paymentGuard";
+import { runAction, showMe } from "./lib/pageActions";
+import { findFixes } from "./lib/fixes";
+import { pageHasLogin, readDemoDomain, readPage } from "./lib/pageReader";
+import { amountToNumber, findAmount, installPageGuard, looksLikePayment, setPageTrust } from "./lib/paymentGuard";
 import { loadSettings } from "./lib/settings";
 import { closeSpotlight, isSpotlightOpen } from "./lib/spotlight";
-import type { SimplifyResponse } from "./types";
+import type { PageReadResult, TabRequest } from "./types";
 
-// The script may be injected more than once; only add listeners once.
+// This file may be injected twice (for example after the extension reloads); set up once.
 const nudiWindow = window as typeof window & { nudiReady?: boolean };
+
 if (!nudiWindow.nudiReady) {
-  installPageGuard();
-  // Escape closes the "Show me" spotlight first, then the panel.
-  document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    if (document.getElementById("nudi-confirm")) return; // the payment question handles its own Escape
-    if (isSpotlightOpen()) closeSpotlight();
-    else if (document.getElementById("nudi-root")) closeView();
-  });
   nudiWindow.nudiReady = true;
-}
+  loadSettings();
+  installPageGuard();
 
-/** quiet = true when we refresh after a fix, so Nudi does not repeat everything aloud. */
-async function start(quiet = false): Promise<void> {
-  await loadSettings();
-  if (!quiet) showMessage("Reading this page…", "One moment. I am making it simple for you.", true);
-  try {
-    const page = readPage();
-    const result = await askBackground<SimplifyResponse>({ type: "simplify", page });
-    showActionView(result, page, () => start(true), quiet);
-  } catch (error) {
-    showMessage("Nudi cannot connect", "The Nudi helper server is not running. Please start it, then try again.");
-    console.error("Nudi:", error);
-  }
-}
+  // Escape closes the "Show me" spotlight. (The payment question handles its own Escape.)
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && isSpotlightOpen()) closeSpotlight();
+  });
 
-start();
+  let fixes = findFixes();
+
+  chrome.runtime.onMessage.addListener((request: TabRequest, _sender, sendResponse) => {
+    switch (request.type) {
+      case "nudi:read": {
+        loadSettings(); // pick up any change made in the side panel
+        const page = readPage();
+        const demo = readDemoDomain();
+        fixes = findFixes();
+        const result: PageReadResult = {
+          page,
+          fixes: fixes.map((fix) => fix.message),
+          hasPayment: page.elements.some((e) => looksLikePayment(e.label)),
+          hasLogin: pageHasLogin(),
+          demoDomain: demo.domain,
+          demoAgeDays: demo.ageDays,
+        };
+        sendResponse(result);
+        break;
+      }
+      case "nudi:run":
+        runAction(request.action);
+        sendResponse(true);
+        break;
+      case "nudi:show-me":
+        showMe(request.elementId, request.label);
+        sendResponse(true);
+        break;
+      case "nudi:fix": {
+        const fix = fixes[request.index];
+        if (fix) {
+          fix.apply();
+          const saved = amountToNumber(findAmount(fix.message)) ?? 0;
+          askBackground({ type: "family:event", event: { kind: "addon_removed", amount_saved: saved } }).catch(() => {});
+        }
+        sendResponse(Boolean(fix));
+        break;
+      }
+      case "nudi:set-trust":
+        setPageTrust(request.trust);
+        sendResponse(true);
+        break;
+    }
+    return false; // all replies above are sent right away
+  });
+}

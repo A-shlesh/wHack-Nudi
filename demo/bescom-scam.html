@@ -1,0 +1,104 @@
+<!doctype html>
+<!--
+  FAKE SCAM demo page for testing Nudi's Domain Trust Check. A copy of the
+  PowerGrid bill page, pretending to be "bescom-bill-pay-offer.co": a website
+  that uses the BESCOM name but is NOT bescom.co.in, and is only 9 days old.
+  Nudi must rate it "danger" and block payment. Nothing here sends any data.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Demo only: Nudi pretends this page is on this website (accepted on localhost only). -->
+    <meta name="nudi-demo-domain" content="bescom-bill-pay-offer.co" />
+    <meta name="nudi-demo-domain-age-days" content="9" />
+    <title>BESCOM Bill Pay OFFER - Pay Electricity Bill (DEMO)</title>
+    <style>
+      body { font-family: Arial, sans-serif; font-size: 13px; margin: 0; background: #f2f2f2; color: #333; }
+      header { background: #222; color: #fff; padding: 6px 10px; display: flex; gap: 12px; flex-wrap: wrap; }
+      header a { color: #9cf; font-size: 11px; }
+      .layout { display: grid; grid-template-columns: 160px 1fr 180px; gap: 8px; padding: 8px; }
+      .ad { background: #ffe; border: 1px dashed #cc0; padding: 6px; font-size: 11px; margin-bottom: 6px; }
+      main { background: #fff; padding: 10px; }
+      .timer { color: #c00; font-weight: bold; }
+      .tiny { font-size: 10px; color: #777; }
+      .cookie { position: fixed; bottom: 0; left: 0; right: 0; background: #333; color: #fff; padding: 8px; }
+      .demo-banner { background: #fde68a; color: #000; padding: 4px; text-align: center; font-size: 12px; }
+      #result { color: green; font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <div class="demo-banner">
+      DEMO SCAM PAGE (pretends to be bescom-bill-pay-offer.co). Not a real website. &nbsp;·&nbsp; <a href="index.html">Back to the normal bill page</a>
+    </div>
+    <header>
+      <strong>BESCOM Bill Pay OFFER</strong>
+      <a href="#">Home</a><a href="#">Tariffs</a><a href="#">New Connection</a><a href="#">Solar</a>
+      <a href="#">Careers</a><a href="#">Media</a><a href="#">Tenders</a><a href="#">Share</a>
+    </header>
+
+    <div class="layout">
+      <aside>
+        <div class="ad">Sponsored: Lucky winner! Claim your prize, free gift for you today!</div>
+        <div class="ad">Advert: Best loans in 5 minutes</div>
+        <a href="#">Sign up for newsletter</a>
+      </aside>
+
+      <main>
+        <h3>Pay Electricity Bill</h3>
+        <p>Consumer: R. Kumar &nbsp; | &nbsp; Account: 1234567890 &nbsp; | &nbsp; Due: 28 Nov</p>
+        <p class="timer">Hurry! Offer ends in <span id="clock">04:59</span>. Only a few left!</p>
+
+        <label>Login password <input type="password" name="password" /></label><br /><br />
+        <label>Mobile number <input type="tel" name="mobile" placeholder="Mobile number" /></label><br /><br />
+        <label>OTP <input type="text" name="otp" placeholder="Enter OTP" /></label><br /><br />
+
+        <p><strong>Bill amount: ₹1,176</strong></p>
+        <label><input type="checkbox" id="addon" checked /> Bill protection plan added (₹99)</label>
+        <p class="tiny">Total to pay: <span id="total">₹1,275</span></p>
+
+        <button id="pay">PAY <span id="pay-amount">₹1,275</span> NOW</button>
+        <button id="download">Download bill (PDF)</button>
+        <button id="history">See past bills</button>
+        <a href="#" id="nothanks">No, I don't want to save money</a>
+
+        <p id="result"></p>
+      </main>
+
+      <aside>
+        <div class="ad">Advert: Shop festive sale</div>
+        <div class="ad">Sponsored: Win an iPhone</div>
+        <a href="#">Terms</a> · <a href="#">Privacy</a>
+      </aside>
+    </div>
+
+    <div class="cookie">
+      We use cookies. <button id="cookie-ok">Accept all cookies</button> <a href="#">Cookie settings</a>
+    </div>
+
+    <script>
+      // Fake countdown timer (a classic "rush you" trick).
+      let seconds = 299;
+      setInterval(() => {
+        seconds = seconds > 0 ? seconds - 1 : 299;
+        const m = String(Math.floor(seconds / 60)).padStart(2, "0");
+        const s = String(seconds % 60).padStart(2, "0");
+        document.getElementById("clock").textContent = `${m}:${s}`;
+      }, 1000);
+
+      // Fake actions: only show a message, nothing is sent anywhere.
+      const result = document.getElementById("result");
+      document.getElementById("pay").onclick = () => (result.textContent = "Payment done (demo only, no money moved).");
+      document.getElementById("download").onclick = () => (result.textContent = "Bill downloaded (demo).");
+      document.getElementById("history").onclick = () => (result.textContent = "Past bills: Oct ₹1,180, Sep ₹1,020 (demo).");
+      document.getElementById("cookie-ok").onclick = () => document.querySelector(".cookie").remove();
+
+      // The pre-ticked extra changes the total (Nudi's "Fix it for me" unticks it).
+      document.getElementById("addon").onchange = (event) => {
+        const total = event.target.checked ? "₹1,275" : "₹1,176";
+        document.getElementById("total").textContent = total;
+        document.getElementById("pay-amount").textContent = total;
+      };
+    </script>
+  </body>
+</html>

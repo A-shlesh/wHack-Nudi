@@ -22,8 +22,13 @@ for (const weight of ["400", "700"]) {
 }
 
 const options = {
-  // One output file per entry point.
-  entryPoints: ["src/content.ts", "src/background.ts", "src/popup.ts"],
+  // One output file per entry point: name in dist -> source file.
+  entryPoints: {
+    content: "src/content.ts",
+    background: "src/background.ts",
+    sidepanel: "src/sidepanel.ts",
+    "mic-permission": "src/micPermission.ts",
+  },
   outdir: "dist",
   bundle: true,
   format: "iife", // plain scripts: content scripts cannot use ES modules

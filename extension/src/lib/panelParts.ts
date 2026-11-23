@@ -2,51 +2,80 @@
 // verdict, the big choices, and the "watch out" notices.
 // actionView.ts puts these blocks together.
 
-import type { Action, PageWarning } from "../types";
-import type { Fix } from "./fixes";
+import type { Action, PageWarning, TrustResult } from "../types";
 import { el, iconButton, iconSpan, logoSpan } from "./ui";
 
 // ---------- Header ----------
 
-export function buildHeader(onHide: (() => void) | null, onClose: () => void): HTMLElement {
+/** sharing: null = no family connected, true = sharing ON, false = paused. */
+export function buildHeader(sharing: boolean | null): HTMLElement {
   const header = el("header", "header");
   const wordmark = el("div", "wordmark");
   wordmark.append(el("div", "wordmark-name", "Nudi"), el("div", "wordmark-sub", "Here to help"));
   header.append(logoSpan(40), wordmark);
-
-  if (onHide) {
-    const hide = iconButton("header-btn", "hide", "Hide", "Hide Nudi for now");
-    hide.onclick = onHide;
-    header.append(hide);
+  if (sharing !== null) {
+    const badge = el("div", sharing ? "share-badge on" : "share-badge", sharing ? "Sharing with family: ON" : "Sharing paused");
+    header.append(badge);
   }
-  const close = iconButton("header-btn", "close", "Close", "Close Nudi");
-  close.onclick = onClose;
-  header.append(close);
   return header;
 }
 
-// ---------- Verdict: is this page safe? ----------
+// ---------- Verdict: is this website and page safe? ----------
 
-export function buildVerdict(warnings: PageWarning[], onSeeWhy: () => void): HTMLElement {
-  const dangers = warnings.filter((w) => w.level === "danger").length;
-  const cautions = warnings.filter((w) => w.level === "caution").length;
+type Level = "safe" | "careful" | "risky";
 
-  const [level, title, text] =
-    dangers > 0
-      ? ["risky", "This page looks risky", "I found signs of a scam. Please do not share any personal details here."]
-      : cautions > 0
-        ? ["careful", "Be careful on this page", "This page uses tricks to rush or push you. Take your time."]
-        : ["safe", "This page looks safe", "I did not find any tricks. Still, never share your OTP."];
+/** The worst of: the website trust check, and the warnings found on the page. */
+function overallLevel(trust: TrustResult | null, warnings: PageWarning[]): Level {
+  if (trust?.level === "danger" || warnings.some((w) => w.level === "danger")) return "risky";
+  if (trust?.level === "caution" || warnings.some((w) => w.level === "caution")) return "careful";
+  return "safe";
+}
+
+export function buildVerdict(trust: TrustResult | null, warnings: PageWarning[], onSeeWhy: () => void): HTMLElement {
+  const level = overallLevel(trust, warnings);
+  const scamSite = trust?.level === "danger";
+
+  const [title, text] =
+    level === "risky"
+      ? scamSite
+        ? ["This website looks like a scam", "Do not pay or share any details here. Nudi will block payments on this website."]
+        : ["This page looks risky", "I found signs of a scam on this page. Please do not share any personal details."]
+      : level === "careful"
+        ? ["Be careful on this page", "Something here needs a second look. Take your time."]
+        : ["This website looks safe", "I did not find any tricks. Still, never share your OTP."];
 
   const verdict = el("section", `verdict ${level}`);
   verdict.setAttribute("aria-label", "Safety check");
   const heading = el("div", "verdict-title");
-  heading.setAttribute("tabindex", "-1"); // so we can move keyboard focus here when the panel opens
+  heading.setAttribute("tabindex", "-1"); // so we can move keyboard focus here
   heading.append(iconSpan(level === "safe" ? "shield" : "alert", 26), el("span", "", title));
   verdict.append(heading, el("p", "", text));
 
+  // Website trust: the domain, a score bar, and the reasons in plain words.
+  if (trust) {
+    const site = el("div", "trust-site");
+    site.append(el("span", "", "Website: "), el("strong", "", trust.domain));
+    const meter = el("div", "meter");
+    meter.setAttribute("role", "meter");
+    meter.setAttribute("aria-label", "Website trust score");
+    meter.setAttribute("aria-valuemin", "0");
+    meter.setAttribute("aria-valuemax", "100");
+    meter.setAttribute("aria-valuenow", String(trust.trust_score));
+    const fill = el("div", `meter-fill ${trust.level}`);
+    fill.style.width = `${Math.max(4, trust.trust_score)}%`;
+    meter.append(fill);
+    const score = el("div", "meter-label", `Trust score: ${trust.trust_score} out of 100`);
+    verdict.append(site, meter, score);
+
+    if (trust.reasons.length > 0) {
+      const list = el("ul", "trust-reasons");
+      for (const reason of trust.reasons) list.append(el("li", "", reason.message_simple));
+      verdict.append(list);
+    }
+  }
+
   if (warnings.length > 0) {
-    const seeWhy = el("button", "link-btn", `See why (${warnings.length})`);
+    const seeWhy = el("button", "link-btn", `See what I found on this page (${warnings.length})`);
     seeWhy.onclick = onSeeWhy;
     verdict.append(seeWhy);
   }
@@ -107,14 +136,14 @@ export function buildWarningList(warnings: PageWarning[]): HTMLElement {
   return list;
 }
 
-/** A "Remove it for me" card for a sneaky extra. onFixed runs after the fix. */
-export function buildFix(fix: Fix, onFixed: () => void): HTMLElement {
+/** A "Remove it for me" card for a sneaky extra. apply() does the fix in the page. */
+export function buildFix(message: string, apply: () => void, onFixed: () => void): HTMLElement {
   const notice = el("div", "notice fix");
   const content = el("div", "");
-  content.append(el("div", "notice-title", "Something extra was added for you"), el("div", "", fix.message));
+  content.append(el("div", "notice-title", "Something extra was added for you"), el("div", "", message));
   const button = el("button", "btn primary", "Remove it for me");
   button.onclick = () => {
-    fix.apply();
+    apply();
     notice.className = "notice done";
     notice.replaceChildren(
       iconSpan("checkCircle", 22),

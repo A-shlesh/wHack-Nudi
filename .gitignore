@@ -17,3 +17,6 @@ extension/dist/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Local test harness (not part of the product)
+demo/_tmp/

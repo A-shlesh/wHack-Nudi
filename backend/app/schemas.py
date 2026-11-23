@@ -62,3 +62,30 @@ class AskResponse(BaseModel):
 class SpeakRequest(BaseModel):
     text: str = Field(max_length=1000)
     language: str = "en"
+
+
+# ---------- Domain trust check ----------
+
+
+class TrustRequest(BaseModel):
+    url: str
+    has_payment: bool = False  # the page has a pay/buy button
+    has_login: bool = False  # the page asks for a password
+    # Only used for demo pages on localhost (see domain_trust.py).
+    demo_domain: str | None = Field(default=None, max_length=253)
+    demo_age_days: int | None = None
+
+
+class TrustReason(BaseModel):
+    code: str
+    message_simple: str
+
+
+class TrustResponse(BaseModel):
+    domain: str
+    trust_score: int = Field(ge=0, le=100)
+    level: Literal["safe", "caution", "danger"]
+    reasons: list[TrustReason]
+    domain_age_days: int | None
+    lookalike_of: str | None
+    https: bool

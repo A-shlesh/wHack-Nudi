@@ -1,36 +1,48 @@
 {
   "manifest_version": 3,
   "name": "Nudi - Simple Web Helper",
-  "version": "0.2.0",
-  "description": "Turns busy websites into a few big, simple buttons. Warns about scams. Always asks before you pay.",
+  "version": "0.3.0",
+  "description": "Makes busy websites simple, warns about scams, and always checks with you before you pay.",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
   "action": {
-    "default_title": "Nudi: help me with this page (Alt+Shift+N)",
-    "default_popup": "popup.html",
+    "default_title": "Open Nudi (Alt+Shift+N)",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png"
     }
   },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "background": {
     "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "commands": {
     "open-nudi": {
       "suggested_key": { "default": "Alt+Shift+N" },
-      "description": "Open Nudi on this page"
+      "description": "Open Nudi next to this page"
     }
   },
-  "permissions": ["activeTab", "scripting", "storage"],
-  "host_permissions": ["http://localhost:8787/*"],
+  "permissions": ["sidePanel", "activeTab", "scripting", "storage"],
+  "host_permissions": [
+    "http://localhost:8787/*",
+    "https://*.execute-api.ap-south-1.amazonaws.com/*"
+  ],
   "web_accessible_resources": [
     {
       "resources": ["fonts/*.woff2"],
-      "matches": ["<all_urls>"]
+      "matches": ["http://*/*", "https://*/*"]
     }
   ]
 }

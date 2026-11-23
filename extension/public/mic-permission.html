@@ -1,0 +1,30 @@
+<!doctype html>
+<!--
+  Opened only when "Talk to Nudi" was not allowed to use the microphone.
+  Chrome cannot show the microphone question inside the side panel, so this
+  page asks once. After the user allows it, Talk works in the side panel.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Nudi: allow the microphone</title>
+    <style>
+      @font-face { font-family: "NudiAtkinson"; src: url("fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; }
+      @font-face { font-family: "NudiAtkinson"; src: url("fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f7f4ee; color: #1a1a1a;
+             font: 20px/1.5 "NudiAtkinson", "Segoe UI", system-ui, sans-serif; }
+      main { max-width: 520px; padding: 32px; background: #fff; border-radius: 16px; border-top: 10px solid #0f5257; }
+      h1 { margin: 0 0 12px; font-size: 30px; }
+      #status { font-weight: 700; color: #0f5257; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Let Nudi hear you</h1>
+      <p>Chrome will ask if Nudi may use the microphone. Please choose <strong>Allow</strong>.</p>
+      <p>Nudi only listens while the <strong>Talk to Nudi</strong> button is red.</p>
+      <p id="status" role="status">Waiting for your answer…</p>
+    </main>
+    <script src="mic-permission.js"></script>
+  </body>
+</html>

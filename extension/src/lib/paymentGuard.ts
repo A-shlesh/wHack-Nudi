@@ -1,9 +1,16 @@
-// The payment guard. Nudi ALWAYS stops and asks before anything that spends
-// money. It works in two ways:
-//   1. Buttons in the Action View that look like payments ask first.
+// The payment guard (runs inside the web page). Nudi ALWAYS stops and asks
+// before anything that spends money:
+//   1. Choices in the side panel that look like payments ask first.
 //   2. A page-wide click watcher catches the user clicking a "Pay"/"Buy"
 //      button on the real page, and asks first there too.
+//
+// The question ("Check before you pay") has three answers:
+//   No, do not pay  |  Yes, pay  |  Ask Sushant (Family Link)
+// If the website looks like a SCAM (trust level "danger"), "Yes" is removed:
+// the only way forward is a family member approving it.
 
+import type { ApprovalStatus, FamilyState, TrustResult } from "../types";
+import { askBackground } from "./messages";
 import { visibleLabel } from "./pageReader";
 import { createOverlayHost, el, iconSpan } from "./ui";
 import { speak } from "./voice";
@@ -12,17 +19,28 @@ import { speak } from "./voice";
 // words, so "pay" does not match "display".
 const PAYMENT_PATTERN =
   /\b(?:pay|payment|buy|checkout|check out|place order|purchase|subscribe|donate|transfer|send money|confirm order)\b/i;
-// Kannada and Hindi words for "payment" / "pay".
-const NATIVE_PAYMENT_WORDS = ["ಪಾವತಿ", "भुगतान", "पे करें"];
 
 export function looksLikePayment(label: string): boolean {
-  return PAYMENT_PATTERN.test(label) || NATIVE_PAYMENT_WORDS.some((word) => label.includes(word));
+  return PAYMENT_PATTERN.test(label);
 }
 
 /** Find a money amount such as "₹1,339" or "Rs. 500" in a button label. */
-function findAmount(label: string): string | null {
+export function findAmount(label: string): string | null {
   const match = label.match(/(?:₹|rs\.?|inr)\s?\d[\d,]*(?:\.\d+)?/i);
   return match ? match[0] : null;
+}
+
+/** "₹1,339" -> 1339 (for the family's "money saved" total). */
+export function amountToNumber(amount: string | null): number | null {
+  if (!amount) return null;
+  const digits = amount.replace(/[^\d.]/g, "");
+  return digits ? Number(digits) : null;
+}
+
+// The trust result for this page, sent by the side panel (null = not checked).
+let pageTrust: TrustResult | null = null;
+export function setPageTrust(trust: TrustResult | null): void {
+  pageTrust = trust;
 }
 
 // Three quick questions to make the user pause and think before paying.
@@ -32,80 +50,184 @@ const CHECKLIST = [
   "Nobody on the phone is telling me to do this",
 ];
 
+const POLL_EVERY_MS = 2000;
+
 // Only one payment question at a time (a page might fire several clicks).
 let dialogOpen = false;
 
-/** Show a big Yes / No question. Resolves true only if the user taps Yes. */
-export function confirmPayment(actionLabel: string): Promise<boolean> {
-  if (dialogOpen) return Promise.resolve(false);
+/** Ask the user (and maybe their family) before paying. Resolves true only on a real "Yes". */
+export async function confirmPayment(actionLabel: string): Promise<boolean> {
+  if (dialogOpen) return false;
   dialogOpen = true;
 
-  const { host, app } = createOverlayHost("nudi-confirm");
+  const family = await askBackground<FamilyState>({ type: "family:state" }).catch(() => null);
+  const familyReady = family?.status === "paired" && family.sharingOn;
+  const familyName = family?.familyName ?? "my family";
   const amount = findAmount(actionLabel);
+  const site = pageTrust?.domain ?? location.hostname;
 
+  const { host, app } = createOverlayHost("nudi-confirm");
   const dialog = el("div", "dialog");
   dialog.setAttribute("role", "alertdialog");
   dialog.setAttribute("aria-modal", "true");
-  dialog.setAttribute("aria-labelledby", "nudi-pay-title");
-
-  const title = el("h2", "", "Check before you pay");
-  title.id = "nudi-pay-title";
-  dialog.append(title, el("p", "muted", `You pressed "${actionLabel}". This will spend money.`));
-
-  if (amount) {
-    const box = el("div", "amount");
-    box.append(el("div", "amount-label", "You are about to pay"), el("div", "amount-value", amount));
-    dialog.append(box);
-  }
-
-  dialog.append(el("p", "", "Pay only if all of these are true:"));
-  const list = el("ul", "checklist");
-  for (const item of CHECKLIST) {
-    const li = el("li", "");
-    li.append(iconSpan("check", 20), el("span", "", item));
-    list.append(li);
-  }
-  dialog.append(list);
-
-  // "No" is the big, safe, default button. "Yes" is plainer on purpose.
-  const no = el("button", "btn primary", "No, do not pay");
-  const yes = el("button", "btn secondary", amount ? `Yes, pay ${amount}` : "Yes, continue");
-  const buttons = el("div", "dialog-buttons");
-  buttons.append(no, yes);
-  const note = el("div", "privacy-line");
-  note.append(iconSpan("shield", 18), el("span", "", "Nudi never sees your card, OTP or password."));
-  dialog.append(buttons, note);
-
   const backdrop = el("div", "backdrop");
   backdrop.append(dialog);
   app.append(backdrop);
 
-  const spoken = amount
-    ? `Before you pay ${amount}. Is this the right website, and do you know who you are paying? Tap No to stop, or Yes to pay.`
-    : `This will spend money. Tap No to stop, or Yes to continue.`;
-  speak(spoken);
+  return new Promise<boolean>((resolve) => {
+    let polling: number | undefined;
 
-  return new Promise((resolve) => {
-    const finish = (answer: boolean) => {
+    const finish = (paid: boolean) => {
       dialogOpen = false;
+      window.clearInterval(polling);
       document.removeEventListener("keydown", onKey, true);
       host.remove();
-      resolve(answer);
+      const event = paid ? "payment_confirmed" : "payment_blocked";
+      askBackground({ type: "family:event", event: { kind: event, amount: amountToNumber(amount) } }).catch(() => {});
+      resolve(paid);
     };
-    // Escape means "No". stopPropagation so Escape does not ALSO close the panel.
+
+    // Escape means "No". stopPropagation so Escape does not ALSO close other Nudi parts.
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.stopPropagation();
       finish(false);
     };
     document.addEventListener("keydown", onKey, true);
-    // isTrusted is only true for a real tap or key press by the person,
-    // never for a fake click made by the website's own code.
-    yes.onclick = (event) => {
-      if (event.isTrusted) finish(true);
+
+    // ----- the screens inside the dialog -----
+
+    const amountBox = () => {
+      const box = el("div", "amount");
+      box.append(el("div", "amount-label", "You are about to pay"), el("div", "amount-value", amount ?? "an amount"));
+      return box;
     };
-    no.onclick = () => finish(false);
-    no.focus(); // the safe choice is the default
+
+    const privacyLine = () => {
+      const note = el("div", "privacy-line");
+      note.append(iconSpan("shield", 18), el("span", "", "Nudi never sees your card, OTP or password."));
+      return note;
+    };
+
+    const askFamilyButton = (primary: boolean) => {
+      const button = el("button", primary ? "btn primary" : "btn secondary", `Ask ${familyName} first`);
+      button.onclick = askFamily;
+      return button;
+    };
+
+    /** Normal check: No (big, default) / Yes / Ask family. */
+    function showCheck(approvedByFamily = false): void {
+      const title = el("h2", "", "Check before you pay");
+      const lead = approvedByFamily
+        ? `${familyName} said it is OK. You can still say no.`
+        : `You pressed "${actionLabel}". This will spend money.`;
+      const list = el("ul", "checklist");
+      for (const item of CHECKLIST) {
+        const li = el("li", "");
+        li.append(iconSpan("check", 20), el("span", "", item));
+        list.append(li);
+      }
+      const no = el("button", "btn primary", "No, do not pay");
+      const yes = el("button", "btn secondary", amount ? `Yes, pay ${amount}` : "Yes, continue");
+      // isTrusted is only true for a real tap or key press by the person,
+      // never for a fake click made by the website's own code.
+      yes.onclick = (event) => {
+        if (event.isTrusted) finish(true);
+      };
+      no.onclick = () => finish(false);
+      const buttons = el("div", "dialog-buttons");
+      buttons.append(no, yes);
+      if (familyReady && !approvedByFamily) buttons.append(askFamilyButton(false));
+
+      dialog.className = "dialog";
+      dialog.replaceChildren(title, el("p", "muted", lead), amountBox(), el("p", "", "Pay only if all of these are true:"), list, buttons, privacyLine());
+      no.focus(); // the safe choice is the default
+      speak(
+        approvedByFamily
+          ? `${familyName} said it is OK. Do you want to pay ${amount ?? ""}?`
+          : `Before you pay ${amount ?? ""}. Is this the right website, and do you know who you are paying?`,
+      );
+    }
+
+    /** Scam site: payment is blocked. Only family can unlock it. */
+    function showBlocked(): void {
+      const title = el("h2", "", "Nudi stopped this payment");
+      const reasons = el("ul", "checklist danger-list");
+      for (const reason of pageTrust?.reasons ?? []) {
+        const li = el("li", "");
+        li.append(iconSpan("alert", 20), el("span", "", reason.message_simple));
+        reasons.append(li);
+      }
+      const close = el("button", "btn primary", "OK, do not pay");
+      close.onclick = () => finish(false);
+      const buttons = el("div", "dialog-buttons");
+      buttons.append(close);
+      const lead = familyReady
+        ? `This website looks like a scam. You can only pay if ${familyName} checks it and says yes.`
+        : "This website looks like a scam, so paying here is blocked.";
+      if (familyReady) buttons.append(askFamilyButton(false));
+
+      dialog.className = "dialog blocked";
+      dialog.replaceChildren(title, el("p", "", lead), amountBox(), reasons, buttons, privacyLine());
+      close.focus();
+      speak(`I have stopped this payment. This website looks like a scam. ${familyReady ? `You can ask ${familyName} to check it.` : ""}`);
+    }
+
+    /** Waiting for the family member to answer on their phone. */
+    async function askFamily(): Promise<void> {
+      dialog.className = "dialog";
+      const waiting = el("div", "waiting");
+      waiting.setAttribute("role", "status");
+      waiting.append(el("div", "spinner"), el("h2", "", `Waiting for ${familyName}…`));
+      const cancel = el("button", "btn secondary", "Stop waiting, do not pay");
+      cancel.onclick = () => finish(false);
+      dialog.replaceChildren(
+        waiting,
+        el("p", "muted", `I sent ${familyName} the website name and the amount. Nothing else.`),
+        cancel,
+      );
+      speak(`Waiting for ${familyName}.`);
+
+      try {
+        const { approval_id } = await askBackground<{ approval_id: string }>({
+          type: "family:ask-approval",
+          site,
+          amount,
+          reasons: (pageTrust?.reasons ?? []).map((r) => r.message_simple),
+        });
+        polling = window.setInterval(async () => {
+          const status = await askBackground<ApprovalStatus>({ type: "family:approval-status", approvalId: approval_id }).catch(
+            () => "pending" as ApprovalStatus,
+          );
+          if (status === "approved") {
+            window.clearInterval(polling);
+            showCheck(true);
+          } else if (status === "blocked") {
+            window.clearInterval(polling);
+            showFamilySaidNo();
+          }
+        }, POLL_EVERY_MS);
+      } catch {
+        dialog.replaceChildren(el("h2", "", "I could not reach your family"), el("p", "", "To be safe, do not pay now."), cancel);
+        speak("I could not reach your family. To be safe, do not pay now.");
+      }
+    }
+
+    function showFamilySaidNo(): void {
+      const ok = el("button", "btn primary", "OK");
+      ok.onclick = () => finish(false);
+      dialog.className = "dialog blocked";
+      dialog.replaceChildren(
+        el("h2", "", `${familyName} said no`),
+        el("p", "", `${familyName} thinks this is not safe, so I stopped the payment. No money was spent. You did the right thing by asking.`),
+        ok,
+      );
+      ok.focus();
+      speak(`${familyName} said no, so I stopped the payment. No money was spent. You did the right thing by asking.`);
+    }
+
+    if (pageTrust?.level === "danger") showBlocked();
+    else showCheck();
   });
 }
 

@@ -43,10 +43,19 @@ export function buildControls(options: ControlsOptions): HTMLElement {
     stopSpeaking();
     talk.classList.add("listening");
     setLabel(talk, iconSpan("mic"), "Listening…");
-    listenOnce(options.onHeard, () => {
-      talk.classList.remove("listening");
-      setLabel(talk, iconSpan("mic"), "Talk to Nudi");
-    });
+    listenOnce(
+      options.onHeard,
+      () => {
+        talk.classList.remove("listening");
+        setLabel(talk, iconSpan("mic"), "Talk to Nudi");
+      },
+      () => {
+        // Chrome cannot ask for the microphone inside the side panel, so we open
+        // a small Nudi page in a tab that asks once. After that, Talk works here.
+        speakAlways("Please allow the microphone in the new tab, then come back and tap Talk again.");
+        chrome.tabs.create({ url: chrome.runtime.getURL("mic-permission.html") });
+      },
+    );
   };
 
   const mainRow = el("div", "controls-row");

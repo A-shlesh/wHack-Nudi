@@ -1,20 +1,25 @@
-// Background service worker. It is the ONLY part of the extension that talks
-// to the Nudi backend. Web pages and content scripts cannot always call
-// http://localhost directly (browser security rules), but the extension can.
+// Background service worker.
+//   - It is the ONLY part of the extension that talks to the Nudi backend.
+//   - It makes the toolbar icon (and Alt+Shift+N) open Nudi in Chrome's side panel.
 
+import { BACKEND_URL } from "./config";
+import { postForJson, postJson } from "./lib/api";
+import { handleFamily } from "./lib/familyClient";
 import type { BackgroundReply, BackgroundRequest } from "./types";
 
-const BACKEND_URL = "http://localhost:8787";
+// Clicking the Nudi icon opens the side panel next to the page.
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
+});
 
-async function postJson(path: string, body: unknown): Promise<Response> {
-  return fetch(`${BACKEND_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
+// Keyboard shortcut (Alt+Shift+N) opens the side panel for the current window.
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command === "open-nudi" && tab?.windowId !== undefined) {
+    chrome.sidePanel.open({ windowId: tab.windowId }).catch(console.error);
+  }
+});
 
-/** Turn binary audio into a "data:" URL that the content script can play. */
+/** Turn binary audio into a "data:" URL that a page can play. */
 async function blobToDataUrl(blob: Blob): Promise<string> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   let binary = "";
@@ -23,21 +28,17 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 async function handle(request: BackgroundRequest): Promise<unknown> {
+  if (request.type.startsWith("family:")) return handleFamily(request);
+
   switch (request.type) {
-    case "health": {
-      const response = await fetch(`${BACKEND_URL}/health`);
-      return response.json();
-    }
-    case "simplify": {
-      const response = await postJson("/simplify", request.page);
-      if (!response.ok) throw new Error(`Backend error ${response.status}`);
-      return response.json();
-    }
-    case "ask": {
-      const response = await postJson("/ask", { question: request.question, page: request.page });
-      if (!response.ok) throw new Error(`Backend error ${response.status}`);
-      return response.json();
-    }
+    case "health":
+      return (await fetch(`${BACKEND_URL}/health`)).json();
+    case "simplify":
+      return postForJson("/simplify", request.page);
+    case "ask":
+      return postForJson("/ask", { question: request.question, page: request.page });
+    case "trust":
+      return postForJson("/trust", request.request);
     case "speak": {
       const response = await postJson("/speak", { text: request.text });
       // 204 means "no cloud voice, use the browser voice" -> return null.
@@ -46,16 +47,6 @@ async function handle(request: BackgroundRequest): Promise<unknown> {
     }
   }
 }
-
-// Keyboard shortcut (Alt+Shift+N): open Nudi on the current tab.
-chrome.commands.onCommand.addListener(async (command) => {
-  if (command !== "open-nudi") return;
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) return;
-  chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] }).catch(() => {
-    /* Chrome's own pages (chrome://) cannot be helped */
-  });
-});
 
 chrome.runtime.onMessage.addListener((request: BackgroundRequest, _sender, sendResponse) => {
   handle(request)

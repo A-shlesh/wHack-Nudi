@@ -246,6 +246,49 @@ export const STYLES = `
   .dialog .btn { width: 100%; min-height: 60px; font-size: 20px; }
   .dialog .privacy-line { margin-top: 16px; }
 
+  /* ================= Side panel version ================= */
+  /* In Chrome's side panel Nudi fills the panel instead of floating over the page. */
+  .panel.docked {
+    position: static; width: 100%; max-width: none; height: 100vh;
+    border-left: 0; box-shadow: none; animation: none;
+  }
+  .share-badge {
+    flex: none; padding: 6px 10px; border-radius: 999px; font-size: 13px; font-weight: 700;
+    background: rgba(255, 255, 255, 0.16); border: 2px solid rgba(255, 255, 255, 0.7);
+  }
+  .share-badge.on { background: #fff; color: var(--brand); border-color: #fff; }
+
+  /* Website trust inside the verdict */
+  .trust-site { margin-top: 12px; font-size: calc(16px * var(--scale)); word-break: break-all; }
+  .meter { height: 12px; margin-top: 8px; border-radius: 999px; background: rgba(26, 26, 26, 0.12); overflow: hidden; }
+  .meter-fill { height: 100%; border-radius: 999px; }
+  .meter-fill.safe { background: var(--safe); }
+  .meter-fill.caution { background: var(--warn-line); }
+  .meter-fill.danger { background: var(--danger); }
+  .meter-label { margin-top: 4px; font-size: 14px; font-weight: 700; color: var(--ink-2); }
+  .trust-reasons { margin: 10px 0 0; padding-left: 22px; }
+  .trust-reasons li { margin: 4px 0; }
+
+  /* Family */
+  .family { margin-top: 30px; padding-top: 4px; border-top: 1px solid var(--line); }
+  .family .btn { margin-top: 12px; }
+  .family .ask-input { width: 100%; }
+  .pair-code {
+    margin: 12px 0; padding: 14px; border-radius: 12px; background: var(--paper); border: 2px dashed var(--brand);
+    text-align: center; font-size: 38px; font-weight: 700; letter-spacing: 0.08em; color: var(--brand);
+  }
+  .request-text { font-size: calc(22px * var(--scale)); font-weight: 700; }
+  .shared-details { margin: 14px 0 4px; }
+  .shared-details summary { cursor: pointer; font-weight: 700; color: var(--brand); min-height: 44px; display: flex; align-items: center; }
+  .shared-details ul { margin: 6px 0; padding-left: 22px; }
+  .never-shared { font-weight: 700; color: var(--safe); }
+
+  /* Payment dialog: blocked and waiting */
+  .dialog.blocked { border-top-color: var(--danger); }
+  .danger-list svg { color: var(--danger); }
+  .waiting { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+  .waiting h2 { margin: 0; }
+
   @keyframes fade-up { from { opacity: 0; transform: translateY(6px); } }
 
   @media (prefers-reduced-motion: reduce) {
