@@ -10,9 +10,16 @@ import * as esbuild from "esbuild";
 
 const watch = process.argv.includes("--watch");
 
-mkdirSync("dist", { recursive: true });
+mkdirSync("dist/fonts", { recursive: true });
 cpSync("manifest.json", "dist/manifest.json");
 cpSync("public", "dist", { recursive: true });
+
+// Atkinson Hyperlegible: a free font made by the Braille Institute for
+// people with low vision. We ship it inside the extension.
+const fontFolder = "node_modules/@fontsource/atkinson-hyperlegible/files";
+for (const weight of ["400", "700"]) {
+  cpSync(`${fontFolder}/atkinson-hyperlegible-latin-${weight}-normal.woff2`, `dist/fonts/atkinson-${weight}.woff2`);
+}
 
 const options = {
   // One output file per entry point.

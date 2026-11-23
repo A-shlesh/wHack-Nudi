@@ -47,6 +47,16 @@ async function handle(request: BackgroundRequest): Promise<unknown> {
   }
 }
 
+// Keyboard shortcut (Alt+Shift+N): open Nudi on the current tab.
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command !== "open-nudi") return;
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return;
+  chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] }).catch(() => {
+    /* Chrome's own pages (chrome://) cannot be helped */
+  });
+});
+
 chrome.runtime.onMessage.addListener((request: BackgroundRequest, _sender, sendResponse) => {
   handle(request)
     .then((data) => sendResponse({ ok: true, data } satisfies BackgroundReply<unknown>))

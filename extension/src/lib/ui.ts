@@ -2,7 +2,8 @@
 // We draw inside a "shadow root" so the website's CSS cannot change how
 // Nudi looks, and Nudi's CSS cannot break the website.
 
-import { icon, type IconName } from "./icons";
+import { loadNudiFont } from "./fonts";
+import { icon, logo, type IconName } from "./icons";
 import { STYLES } from "./styles";
 
 /**
@@ -10,6 +11,7 @@ import { STYLES } from "./styles";
  * Returns the root and an ".app" box inside it to draw into.
  */
 export function createOverlayHost(id: string): { host: HTMLElement; root: ShadowRoot; app: HTMLElement } {
+  loadNudiFont();
   document.getElementById(id)?.remove();
   const host = document.createElement("div");
   host.id = id;
@@ -40,6 +42,14 @@ export function iconButton(className: string, iconName: IconName, label = "", ti
   if (title) button.setAttribute("aria-label", title);
   if (title) button.title = title;
   return button;
+}
+
+/** Make a <span> holding Nudi's logo. */
+export function logoSpan(size = 40, bubble?: string, letter?: string): HTMLElement {
+  const span = document.createElement("span");
+  span.innerHTML = logo(size, bubble, letter); // fixed SVG, safe
+  span.style.display = "inline-flex";
+  return span;
 }
 
 /** Make a <span> holding one icon. */

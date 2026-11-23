@@ -1,11 +1,11 @@
-// "Ask Nudi": a question box with ready-made question chips.
+// "Ask a question": ready-made question buttons plus a question box.
 // The question and the (already cleaned) page summary go to the backend,
-// and the answer is shown in a chat bubble and read aloud.
+// and the answer is shown on screen and read aloud.
 
 import type { AskResponse, PageSnapshot } from "../types";
 import { askBackground } from "./messages";
 import { redactText } from "./sanitize";
-import { el, iconButton } from "./ui";
+import { el } from "./ui";
 import { speak } from "./voice";
 
 const SUGGESTIONS = ["How much do I pay?", "When is it due?", "Is this page safe?"];
@@ -18,33 +18,41 @@ export interface AskBox {
 export function createAskBox(page: PageSnapshot): AskBox {
   const wrapper = el("div", "");
   const chips = el("div", "chips");
-  const form = el("form", "ask-form") as HTMLFormElement;
-  const input = el("input", "ask-input") as HTMLInputElement;
-  input.placeholder = "Type a question…";
-  input.setAttribute("aria-label", "Ask Nudi a question about this page");
-  const send = iconButton("send-btn", "send", "", "Ask");
-  send.type = "submit";
-  form.append(input, send);
 
-  const answerBubble = el("div", "answer");
-  answerBubble.hidden = true;
+  const form = el("form", "") as HTMLFormElement;
+  const label = el("label", "ask-label", "Or type your own question");
+  const row = el("div", "ask-form");
+  const input = el("input", "ask-input") as HTMLInputElement;
+  input.placeholder = "For example: what is this page for?";
+  input.id = "nudi-question";
+  label.setAttribute("for", input.id);
+  const send = el("button", "btn primary", "Ask") as HTMLButtonElement;
+  send.type = "submit";
+  row.append(input, send);
+  form.append(label, row);
+
+  // role="status" makes screen readers announce the answer when it appears.
+  const answer = el("div", "answer");
+  answer.setAttribute("role", "status");
+  answer.hidden = true;
+
+  function showAnswer(text: string): void {
+    answer.hidden = false;
+    answer.replaceChildren(el("div", "answer-who", "Nudi says"), el("div", "", text));
+    answer.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
 
   async function ask(question: string): Promise<void> {
     const clean = redactText(question.trim());
     if (!clean) return;
     input.value = clean;
-    answerBubble.hidden = false;
-    answerBubble.className = "answer thinking";
-    answerBubble.textContent = "Let me check…";
+    showAnswer("Let me check…");
     try {
       const result = await askBackground<AskResponse>({ type: "ask", question: clean, page });
-      answerBubble.className = "answer";
-      answerBubble.textContent = result.answer;
-      answerBubble.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      showAnswer(result.answer);
       speak(result.answer);
     } catch {
-      answerBubble.className = "answer";
-      answerBubble.textContent = "Sorry, I cannot answer right now. Is the Nudi helper server running?";
+      showAnswer("Sorry, I cannot answer right now. Is the Nudi helper server running?");
     }
   }
 
@@ -58,6 +66,6 @@ export function createAskBox(page: PageSnapshot): AskBox {
     ask(input.value);
   };
 
-  wrapper.append(chips, form, answerBubble);
+  wrapper.append(chips, form, answer);
   return { element: wrapper, ask };
 }

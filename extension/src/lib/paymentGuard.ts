@@ -5,7 +5,7 @@
 //      button on the real page, and asks first there too.
 
 import { visibleLabel } from "./pageReader";
-import { createOverlayHost, el, iconButton, iconSpan } from "./ui";
+import { createOverlayHost, el, iconSpan } from "./ui";
 import { speak } from "./voice";
 
 // Same lists as backend/app/risk_rules.py. English words are matched as whole
@@ -32,40 +32,48 @@ const CHECKLIST = [
   "Nobody on the phone is telling me to do this",
 ];
 
+// Only one payment question at a time (a page might fire several clicks).
+let dialogOpen = false;
+
 /** Show a big Yes / No question. Resolves true only if the user taps Yes. */
 export function confirmPayment(actionLabel: string): Promise<boolean> {
+  if (dialogOpen) return Promise.resolve(false);
+  dialogOpen = true;
+
   const { host, app } = createOverlayHost("nudi-confirm");
   const amount = findAmount(actionLabel);
 
   const dialog = el("div", "dialog");
   dialog.setAttribute("role", "alertdialog");
   dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-labelledby", "nudi-pay-title");
 
-  const iconBox = el("div", "dialog-icon");
-  iconBox.append(iconSpan("lock", 28));
-  dialog.append(iconBox, el("h2", "", "Before you pay"));
-  dialog.append(el("div", "", `You pressed: "${actionLabel}"`));
+  const title = el("h2", "", "Check before you pay");
+  title.id = "nudi-pay-title";
+  dialog.append(title, el("p", "muted", `You pressed "${actionLabel}". This will spend money.`));
 
   if (amount) {
     const box = el("div", "amount");
-    box.append(el("div", "amount-label", "Amount"), el("div", "amount-value", amount));
+    box.append(el("div", "amount-label", "You are about to pay"), el("div", "amount-value", amount));
     dialog.append(box);
   }
 
+  dialog.append(el("p", "", "Pay only if all of these are true:"));
   const list = el("ul", "checklist");
   for (const item of CHECKLIST) {
     const li = el("li", "");
-    li.append(iconSpan("check", 18), el("span", "", item));
+    li.append(iconSpan("check", 20), el("span", "", item));
     list.append(li);
   }
   dialog.append(list);
 
-  const no = iconButton("big-btn no", "close", "No, stop");
-  const yes = iconButton("big-btn yes", "check", amount ? `Yes, pay ${amount}` : "Yes, continue");
+  // "No" is the big, safe, default button. "Yes" is plainer on purpose.
+  const no = el("button", "btn primary", "No, do not pay");
+  const yes = el("button", "btn secondary", amount ? `Yes, pay ${amount}` : "Yes, continue");
   const buttons = el("div", "dialog-buttons");
   buttons.append(no, yes);
-  const note = el("div", "privacy-note");
-  note.append(iconSpan("shield", 16), el("span", "", "Nudi never sees your card, OTP or password."));
+  const note = el("div", "privacy-line");
+  note.append(iconSpan("shield", 18), el("span", "", "Nudi never sees your card, OTP or password."));
   dialog.append(buttons, note);
 
   const backdrop = el("div", "backdrop");
@@ -79,9 +87,18 @@ export function confirmPayment(actionLabel: string): Promise<boolean> {
 
   return new Promise((resolve) => {
     const finish = (answer: boolean) => {
+      dialogOpen = false;
+      document.removeEventListener("keydown", onKey, true);
       host.remove();
       resolve(answer);
     };
+    // Escape means "No". stopPropagation so Escape does not ALSO close the panel.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      finish(false);
+    };
+    document.addEventListener("keydown", onKey, true);
     // isTrusted is only true for a real tap or key press by the person,
     // never for a fake click made by the website's own code.
     yes.onclick = (event) => {

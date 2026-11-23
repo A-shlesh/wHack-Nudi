@@ -1,35 +1,56 @@
 // Reads text aloud. First tries the natural ElevenLabs voice (through the
 // backend). If that is not set up, or fails, it uses the browser's own
 // built-in voice (speechSynthesis), so narration always works.
+// Follows the user's settings: voice on/off and slow voice.
 
 import { askBackground } from "./messages";
+import { getSettings } from "./settings";
 
 let currentAudio: HTMLAudioElement | null = null;
 // Goes up by one every time we start or stop speaking. A slow, older request
 // that finishes late sees the number has changed and stays quiet.
 let speechTurn = 0;
 
+// Lets the panel show "Stop reading" while Nudi is talking.
+let onSpeakingChange: (speaking: boolean) => void = () => {};
+export function watchSpeaking(listener: (speaking: boolean) => void): void {
+  onSpeakingChange = listener;
+}
+
 export function stopSpeaking(): void {
   speechTurn++;
   currentAudio?.pause();
   currentAudio = null;
   speechSynthesis.cancel();
+  onSpeakingChange(false);
 }
 
 function speakWithBrowser(text: string): void {
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 0.85; // a little slower than normal, easier to follow
+  utterance.lang = "en-IN";
+  utterance.rate = getSettings().slowVoice ? 0.8 : 1;
+  utterance.onend = () => onSpeakingChange(false);
   speechSynthesis.speak(utterance);
 }
 
+/** Speak only if the user has the voice turned on. */
 export async function speak(text: string): Promise<void> {
+  if (!getSettings().voiceOn) return;
+  await speakAlways(text);
+}
+
+/** Speak even if automatic voice is off (used by the "Read aloud" button). */
+export async function speakAlways(text: string): Promise<void> {
   stopSpeaking();
   const myTurn = speechTurn;
+  onSpeakingChange(true);
   try {
     const audioUrl = await askBackground<string | null>({ type: "speak", text });
     if (myTurn !== speechTurn) return; // something newer started, or the view was closed
     if (audioUrl) {
       currentAudio = new Audio(audioUrl);
+      currentAudio.playbackRate = getSettings().slowVoice ? 0.9 : 1;
+      currentAudio.onended = () => onSpeakingChange(false);
       await currentAudio.play();
       return;
     }
