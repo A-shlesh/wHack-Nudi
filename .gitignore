@@ -1,0 +1,19 @@
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Node / build output
+node_modules/
+extension/dist/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
