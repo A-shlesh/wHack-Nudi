@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import config
-from .privacy import redact
+from .privacy import redact, safe_url
 from .risk_rules import check_page, is_payment_label
 from .schemas import PageSnapshot, SimplifyResponse, SpeakRequest
 from .services import bedrock_ai, mock_ai, voice
@@ -45,6 +45,8 @@ def health():
 @app.post("/simplify", response_model=SimplifyResponse)
 def simplify(page: PageSnapshot):
     # Safety net: hide anything private that slipped through the extension's filter.
+    page.url = safe_url(page.url)
+    page.title = redact(page.title)
     page.text = redact(page.text)
     for element in page.elements:
         element.label = redact(element.label)
@@ -60,9 +62,12 @@ def simplify(page: PageSnapshot):
     else:
         summary, actions = mock_ai.simplify(page)
 
-    # Never trust the AI alone about money: our own word list can also mark a payment.
+    # Never trust the AI alone about money. The AI may rename "Pay ₹5000" to "Finish",
+    # so we check the ORIGINAL label of the page element too, not just the new label.
+    original_labels = {element.id: element.label for element in page.elements}
     for action in actions:
-        if is_payment_label(action.label):
+        original = original_labels.get(action.element_id, "")
+        if is_payment_label(action.label) or is_payment_label(original):
             action.is_payment = True
 
     return SimplifyResponse(summary=summary, actions=actions, warnings=check_page(page), mode=mode)

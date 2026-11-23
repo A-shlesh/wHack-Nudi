@@ -47,7 +47,9 @@ export function createOverlayHost(id: string): { host: HTMLElement; root: Shadow
   const host = document.createElement("div");
   host.id = id;
   document.documentElement.appendChild(host);
-  const root = host.attachShadow({ mode: "open" });
+  // "closed" means the website's own scripts cannot reach inside (for example
+  // to press our "Yes, pay" button for the user).
+  const root = host.attachShadow({ mode: "closed" });
   root.innerHTML = `<style>${STYLES}</style>`;
   return { host, root };
 }

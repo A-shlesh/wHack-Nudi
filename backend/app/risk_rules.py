@@ -6,6 +6,7 @@ protected in every mode. Each rule is a list of phrases plus the warning to
 show when one of those phrases appears on the page.
 """
 
+import re
 from urllib.parse import urlparse
 
 from .schemas import PageSnapshot, PageWarning
@@ -50,16 +51,26 @@ _TEXT_RULES = [
 ]
 
 # Words that mean a button will spend money. Used to force a confirmation.
+# Matched as whole words, so "pay" does not match "display".
 PAYMENT_WORDS = [
-    "pay", "buy", "checkout", "check out", "place order", "purchase",
-    "subscribe", "donate", "transfer", "send money", "confirm order", "proceed to payment",
+    "pay", "payment", "buy", "checkout", "check out", "place order", "purchase",
+    "subscribe", "donate", "transfer", "send money", "confirm order",
 ]
+_PAYMENT_PATTERN = re.compile(r"\b(?:" + "|".join(PAYMENT_WORDS) + r")\b", re.IGNORECASE)
+
+# Kannada and Hindi words for "payment" / "pay". Plain substring check, because
+# word boundaries (\b) do not work well with these scripts.
+NATIVE_PAYMENT_WORDS = ["ಪಾವತಿ", "भुगतान", "पे करें"]
+
+# Hosts that are your own computer (fine to use without https while testing).
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
 def is_payment_label(label: str) -> bool:
     """True if a button label sounds like it will spend money."""
-    lowered = label.lower()
-    return any(word in lowered for word in PAYMENT_WORDS)
+    if _PAYMENT_PATTERN.search(label):
+        return True
+    return any(word in label for word in NATIVE_PAYMENT_WORDS)
 
 
 def check_page(page: PageSnapshot) -> list[PageWarning]:
@@ -72,7 +83,9 @@ def check_page(page: PageSnapshot) -> list[PageWarning]:
             warnings.append(PageWarning(level=level, message=message))
 
     # A page without https is not safe for payments.
-    if urlparse(page.url).scheme == "http" and "localhost" not in page.url:
+    # We compare the exact host name, so "localhost.evil.com" is NOT treated as local.
+    url = urlparse(page.url)
+    if url.scheme == "http" and url.hostname not in _LOCAL_HOSTS:
         warnings.append(
             PageWarning(level="danger", message="This website is not secure (no https). Do not pay here.")
         )

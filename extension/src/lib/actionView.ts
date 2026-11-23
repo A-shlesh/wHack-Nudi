@@ -3,7 +3,7 @@
 // real page, but payment buttons always ask first.
 
 import type { Action, SimplifyResponse } from "../types";
-import { findElement } from "./pageReader";
+import { findElement, isFormField, visibleLabel } from "./pageReader";
 import { clickApproved, confirmPayment, looksLikePayment } from "./paymentGuard";
 import { createOverlayHost, el } from "./ui";
 import { speak, stopSpeaking } from "./voice";
@@ -40,24 +40,29 @@ async function runAction(action: Action): Promise<void> {
   setTimeout(() => (target.style.outline = ""), 3000);
 
   // Text boxes: just put the cursor there so the user can type.
-  if (target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA") {
+  if (isFormField(target)) {
     target.focus();
     speak(`Please type here: ${action.label}`);
     return;
   }
 
-  // Payments: ALWAYS ask. We check both the backend's flag and our own word list.
-  const isPayment = action.is_payment || looksLikePayment(action.label) || looksLikePayment(target.innerText);
+  // Payments: ALWAYS ask. We check the backend's flag, the new label, AND the
+  // real button's own text (in case the AI renamed "Pay ₹5000" to "Finish").
+  const isPayment = action.is_payment || looksLikePayment(action.label) || looksLikePayment(visibleLabel(target));
   if (isPayment) {
     const yes = await confirmPayment(action.label);
     if (!yes) {
       speak("Okay, I stopped. No money was spent.");
       return;
     }
+    speak(`Okay. ${action.label}.`);
+    clickApproved(target);
+    return;
   }
 
+  // Not a payment: a plain click. The page-wide guard still checks it, as a backup.
   speak(`Okay. ${action.label}.`);
-  clickApproved(target);
+  target.click();
 }
 
 export function showActionView(result: SimplifyResponse): void {
