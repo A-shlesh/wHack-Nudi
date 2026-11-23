@@ -1,0 +1,57 @@
+<!doctype html>
+<!--
+  FAKE scam page for testing Nudi. It copies a common fraud aimed at older
+  people in India: "your bank account will be blocked, update KYC now, share
+  the OTP, install a support app". "SafeBank" is a made-up name.
+  Nothing on this page sends any data anywhere.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>URGENT: Account Blocked - Update KYC Now (DEMO)</title>
+    <style>
+      body { margin: 0; font-family: Arial, sans-serif; background: #fff4f4; color: #222; }
+      .demo-banner { background: #fde68a; padding: 4px; text-align: center; font-size: 12px; }
+      .top { background: #c00; color: #fff; padding: 14px; text-align: center; font-size: 22px; font-weight: bold; }
+      .box { max-width: 520px; margin: 24px auto; background: #fff; border: 2px solid #c00; padding: 20px; }
+      .blink { color: #c00; font-weight: bold; animation: blink 1s steps(2) infinite; }
+      @keyframes blink { 50% { opacity: 0; } }
+      label { display: block; margin: 10px 0; }
+      input { width: 100%; padding: 8px; }
+      button { padding: 12px 18px; font-size: 16px; margin: 6px 4px 0 0; }
+      #result { color: #090; font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <div class="demo-banner">DEMO SCAM PAGE for testing Nudi. Not a real bank. &nbsp;·&nbsp; <a href="index.html">Back to bill demo</a></div>
+    <div class="top">⚠ SafeBank: Your account will be blocked today!</div>
+
+    <div class="box">
+      <p class="blink">Act now! Account suspended in 10 minutes.</p>
+      <p>
+        Dear customer, your KYC is expired. Verify your account immediately or your pension
+        and savings will be frozen. Our officer will call you. Please share OTP to receive
+        your refund of ₹25,000.
+      </p>
+
+      <label>Full name <input name="fullname" placeholder="Full name" /></label>
+      <label>Debit card number <input name="card_number" placeholder="Card number" /></label>
+      <label>OTP <input name="otp" placeholder="Enter OTP sent to your phone" /></label>
+
+      <button id="verify">Verify KYC now</button>
+      <button id="pay">Pay ₹10 verification fee</button>
+      <button id="app">Download AnyDesk support app</button>
+
+      <p id="result"></p>
+    </div>
+
+    <script>
+      // Fake actions: only show a message, nothing is sent anywhere.
+      const result = document.getElementById("result");
+      for (const id of ["verify", "pay", "app"]) {
+        document.getElementById(id).onclick = () => (result.textContent = "(Demo only. In real life this is how scammers steal money.)");
+      }
+    </script>
+  </body>
+</html>

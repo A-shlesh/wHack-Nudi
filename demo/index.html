@@ -25,7 +25,9 @@
     </style>
   </head>
   <body>
-    <div class="demo-banner">DEMO PAGE for testing Nudi. Not a real website.</div>
+    <div class="demo-banner">
+      DEMO PAGE for testing Nudi. Not a real website. &nbsp;·&nbsp; Also try the <a href="kyc-scam.html">fake bank scam page</a>
+    </div>
     <header>
       <strong>PowerGrid Bills</strong>
       <a href="#">Home</a><a href="#">Tariffs</a><a href="#">New Connection</a><a href="#">Solar</a>
@@ -49,10 +51,10 @@
         <label>OTP <input type="text" name="otp" placeholder="Enter OTP" /></label><br /><br />
 
         <p><strong>Bill amount: ₹1,240</strong></p>
-        <label><input type="checkbox" checked /> Bill protection plan added (₹99)</label>
-        <p class="tiny">Total to pay: ₹1,339</p>
+        <label><input type="checkbox" id="addon" checked /> Bill protection plan added (₹99)</label>
+        <p class="tiny">Total to pay: <span id="total">₹1,339</span></p>
 
-        <button id="pay">PAY ₹1,339 NOW</button>
+        <button id="pay">PAY <span id="pay-amount">₹1,339</span> NOW</button>
         <button id="download">Download bill (PDF)</button>
         <button id="history">See past bills</button>
         <a href="#" id="nothanks">No, I don't want to save money</a>
@@ -87,6 +89,13 @@
       document.getElementById("download").onclick = () => (result.textContent = "Bill downloaded (demo).");
       document.getElementById("history").onclick = () => (result.textContent = "Past bills: Oct ₹1,180, Sep ₹1,020 (demo).");
       document.getElementById("cookie-ok").onclick = () => document.querySelector(".cookie").remove();
+
+      // The pre-ticked extra changes the total (Nudi's "Fix it for me" unticks it).
+      document.getElementById("addon").onchange = (event) => {
+        const total = event.target.checked ? "₹1,339" : "₹1,240";
+        document.getElementById("total").textContent = total;
+        document.getElementById("pay-amount").textContent = total;
+      };
     </script>
   </body>
 </html>

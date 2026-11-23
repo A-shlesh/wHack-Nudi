@@ -4,10 +4,15 @@
 
 One click turns a busy page into a calm **Action View**:
 
+- **Safety meter**: "Looks safe", "Be careful" or "Risky page" at a glance
 - **Big, simple buttons** for the few things you actually came to do
+- **"Show me"**: dims the page and points at the real button, so users learn where things are
 - **Scam and dark-pattern warnings** (fake countdowns, prize scams, KYC tricks, items added without asking)
-- **Reads everything aloud**, slowly
-- **Always asks before any payment**, whether you tap Nudi's button or the website's own "Pay" button
+- **"Fix it for me"**: unticks sneaky pre-ticked extras (protection plans, donations) in one tap
+- **Ask Nudi**: "How much do I pay?", "When is it due?", "Is this page safe?" (typed, tapped or spoken)
+- **Talk to Nudi**: voice commands such as "option two", "pay the bill", "read again"
+- **Reads everything aloud**, slowly, with bigger text on request (A− / A+)
+- **Always asks before any payment**, whether you tap Nudi's button or the website's own "Pay" button. It shows the amount large, and "No" is the default.
 - **Never sends passwords, OTPs, card numbers or bank details.** Those fields are skipped inside the browser.
 
 > This is a hackathon prototype, not a finished product.
@@ -30,10 +35,16 @@ One click turns a busy page into a calm **Action View**:
 | Popup | `extension/src/popup.ts` | "Help me with this page" button |
 | Page reader | `extension/src/lib/pageReader.ts` | Lists buttons, links and safe fields |
 | Privacy filter | `extension/src/lib/sanitize.ts` | Skips private fields, hides private numbers |
-| Action View | `extension/src/lib/actionView.ts` | The big-button panel |
-| Payment guard | `extension/src/lib/paymentGuard.ts` | Yes/No question before money is spent |
+| Action View | `extension/src/lib/actionView.ts` | The panel: safety meter, big buttons, warnings, toolbar |
+| Spotlight | `extension/src/lib/spotlight.ts` | "Show me": dims the page around one element |
+| Fixes | `extension/src/lib/fixes.ts` | "Fix it for me": unticks sneaky extras |
+| Ask box | `extension/src/lib/askBox.ts` | Question chips and question box |
+| Voice commands | `extension/src/lib/listen.ts`, `voiceCommands.ts` | Speech to text, then text to a command |
+| Payment guard | `extension/src/lib/paymentGuard.ts` | "Before you pay" dialog |
 | Voice | `extension/src/lib/voice.ts` | ElevenLabs audio, or the browser's own voice |
-| API | `backend/app/main.py` | `/health`, `/simplify`, `/speak`, `/demo/` |
+| Look and feel | `extension/src/lib/styles.ts`, `icons.ts` | All CSS and SVG icons |
+| API | `backend/app/main.py` | `/health`, `/simplify`, `/ask`, `/speak`, `/demo/` |
+| Answers | `backend/app/services/mock_answers.py` | Offline answers for Ask Nudi |
 | Scam rules | `backend/app/risk_rules.py` | Phrase rules that always run |
 | AI | `backend/app/services/bedrock_ai.py` / `mock_ai.py` | Real Bedrock or offline mock |
 
@@ -84,12 +95,14 @@ npm run build
 
 1. Open http://localhost:8787/demo/ (a fake, cluttered bill-payment page)
 2. Click the Nudi icon, then **Help me with this page**
-3. You should see:
-   - Warnings about the countdown, the prize-scam ad, the pre-ticked protection plan and the guilt link
-   - Big buttons: **Pay ₹1,339 now 🔒**, **Download bill**, **See past bills**…
-   - Nudi reading it all aloud
-4. Tap **Pay**. A big **"This will spend money"** question appears. **No, stop** cancels.
-5. Close Nudi and click the page's own **PAY** button. Nudi still stops and asks.
+3. You should see a **Risky page** meter, three big buttons (**Pay ₹1,339 now 🔒**, **Download bill**, **See past bills**), and Nudi reading it aloud.
+4. Tap **Show me** next to Pay. The page dims and the real PAY button glows.
+5. Under **Watch out**, tap **Fix it for me**. The ₹99 protection plan is unticked, and the total becomes ₹1,240.
+6. Tap the chip **How much do I pay?**. Nudi answers "The total to pay is ₹1,240".
+7. Tap **Talk** and say **"option two"** or **"is this page safe?"** (Chrome asks for the microphone once).
+8. Tap **Pay**. The **Before you pay** dialog shows ₹1,240 in large text. **No, stop** is the default.
+9. Close Nudi and click the page's own **PAY** button. Nudi still stops and asks.
+10. Try the second demo, http://localhost:8787/demo/kyc-scam.html: a fake "update your KYC" bank scam.
 
 ### 4. Tests
 
@@ -122,6 +135,7 @@ If a real service fails at runtime, Nudi quietly falls back to mock mode, so the
 - Nothing a user types is ever sent. Text boxes are described only by their hint text.
 - Long numbers, card-like numbers and IFSC codes in page text become `[hidden]`, in the browser **and** again on the server.
 - The backend stores nothing.
+- **Talk** uses Chrome's built-in speech recognition, which sends the audio to Google to turn it into text. It only listens while the Talk button is red.
 
 ## Limits (prototype)
 
