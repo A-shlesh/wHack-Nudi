@@ -47,6 +47,18 @@ class SimplifyResponse(BaseModel):
     mode: Literal["bedrock", "mock"]  # shows whether real AI was used
 
 
+class AskRequest(BaseModel):
+    """A question the user typed or spoke about the current page."""
+
+    question: str = Field(max_length=300)
+    page: PageSnapshot
+
+
+class AskResponse(BaseModel):
+    answer: str
+    mode: Literal["bedrock", "mock"]
+
+
 class SpeakRequest(BaseModel):
     text: str = Field(max_length=1000)
     language: str = "en"

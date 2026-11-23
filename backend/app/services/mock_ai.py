@@ -16,6 +16,7 @@ _SKIP_WORDS = [
 ]
 
 _MAX_ACTIONS = 5
+_ENOUGH_BUTTONS = 3
 
 
 def _score(element: PageElement) -> int:
@@ -40,12 +41,16 @@ def simplify(page: PageSnapshot) -> tuple[str, list[Action]]:
     """Return (summary, actions) for the page without calling any AI service."""
     actions: list[Action] = []
 
+    # If the page has enough real buttons, menu links are just noise: leave them out.
+    button_count = sum(1 for e in page.elements if e.kind == "button")
+    allowed_kinds = ("button",) if button_count >= _ENOUGH_BUTTONS else ("button", "link")
+
     # Best candidates first. sorted() keeps page order when scores are equal.
     candidates = sorted(page.elements, key=_score, reverse=True)
 
     for element in candidates:
         label = element.label.strip()
-        if not label or element.kind not in ("button", "link"):
+        if not label or element.kind not in allowed_kinds:
             continue
         if any(word in label.lower() for word in _SKIP_WORDS):
             continue

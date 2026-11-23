@@ -4,6 +4,7 @@ The Nudi web server (FastAPI).
 Endpoints:
   GET  /health    -> is the server up, and which services are real or mock
   POST /simplify  -> page summary in, Action View (summary, big buttons, warnings) out
+  POST /ask       -> a question about the page in, a short plain answer out
   POST /speak     -> text in, MP3 audio out (or 204 = "use the browser voice")
   GET  /demo/     -> fake demo websites for testing the extension
 
@@ -19,8 +20,8 @@ from fastapi.staticfiles import StaticFiles
 from . import config
 from .privacy import redact, safe_url
 from .risk_rules import check_page, is_payment_label
-from .schemas import PageSnapshot, SimplifyResponse, SpeakRequest
-from .services import bedrock_ai, mock_ai, voice
+from .schemas import AskRequest, AskResponse, PageSnapshot, SimplifyResponse, SpeakRequest
+from .services import bedrock_ai, mock_ai, mock_answers, voice
 
 app = FastAPI(title="Nudi backend")
 
@@ -42,14 +43,18 @@ def health():
     }
 
 
-@app.post("/simplify", response_model=SimplifyResponse)
-def simplify(page: PageSnapshot):
-    # Safety net: hide anything private that slipped through the extension's filter.
+def _clean(page: PageSnapshot) -> None:
+    """Safety net: hide anything private that slipped through the extension's filter."""
     page.url = safe_url(page.url)
     page.title = redact(page.title)
     page.text = redact(page.text)
     for element in page.elements:
         element.label = redact(element.label)
+
+
+@app.post("/simplify", response_model=SimplifyResponse)
+def simplify(page: PageSnapshot):
+    _clean(page)
 
     mode = "mock"
     if config.USE_REAL_BEDROCK:
@@ -71,6 +76,19 @@ def simplify(page: PageSnapshot):
             action.is_payment = True
 
     return SimplifyResponse(summary=summary, actions=actions, warnings=check_page(page), mode=mode)
+
+
+@app.post("/ask", response_model=AskResponse)
+def ask(request: AskRequest):
+    _clean(request.page)
+    question = redact(request.question)
+
+    if config.USE_REAL_BEDROCK:
+        try:
+            return AskResponse(answer=bedrock_ai.answer(question, request.page), mode="bedrock")
+        except Exception as error:  # any failure -> keep the demo running with mock
+            print(f"Bedrock failed, using mock instead: {error}")
+    return AskResponse(answer=mock_answers.answer(question, request.page), mode="mock")
 
 
 @app.post("/speak")

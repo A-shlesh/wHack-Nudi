@@ -41,18 +41,35 @@ def _page_to_prompt(page: PageSnapshot) -> str:
     return f"Title: {page.title}\nURL: {page.url}\n\nElements:\n{elements}\n\nPage text:\n{page.text[:3000]}"
 
 
-def simplify(page: PageSnapshot) -> tuple[str, list[Action]]:
-    """Ask Bedrock to simplify the page. Raises an exception on any failure."""
+_ASK_PROMPT = """You help elderly and low-tech users understand a web page.
+Answer the user's question in one or two short, simple sentences, using ONLY the page information given.
+If the page does not say, answer that you cannot see it on this page.
+Never ask for, and always warn against sharing, an OTP, PIN, password or card number.
+Plain text only, no lists or markdown."""
+
+
+def _ask_model(system_prompt: str, user_text: str, max_tokens: int) -> str:
+    """Send one message to Bedrock and return the reply text."""
     response = _get_client().converse(
         modelId=config.BEDROCK_MODEL_ID,
-        system=[{"text": _SYSTEM_PROMPT}],
-        messages=[{"role": "user", "content": [{"text": _page_to_prompt(page)}]}],
-        inferenceConfig={"maxTokens": 800, "temperature": 0.2},
+        system=[{"text": system_prompt}],
+        messages=[{"role": "user", "content": [{"text": user_text}]}],
+        inferenceConfig={"maxTokens": max_tokens, "temperature": 0.2},
     )
-
     # The reply is a list of content blocks; take the first one that holds text.
     blocks = response["output"]["message"]["content"]
-    text = next(block["text"] for block in blocks if "text" in block)
+    return next(block["text"] for block in blocks if "text" in block)
+
+
+def answer(question: str, page: PageSnapshot) -> str:
+    """Ask Bedrock a question about the page. Raises an exception on any failure."""
+    reply = _ask_model(_ASK_PROMPT, f"{_page_to_prompt(page)}\n\nQuestion: {question}", 200)
+    return reply.strip()
+
+
+def simplify(page: PageSnapshot) -> tuple[str, list[Action]]:
+    """Ask Bedrock to simplify the page. Raises an exception on any failure."""
+    text = _ask_model(_SYSTEM_PROMPT, _page_to_prompt(page), 800)
 
     # Models sometimes wrap JSON in ``` fences; keep only the {...} part.
     data = json.loads(text[text.index("{") : text.rindex("}") + 1])
