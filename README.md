@@ -17,6 +17,19 @@ One click turns a busy page into a calm **Action View**:
 
 > This is a hackathon prototype, not a finished product.
 
+## Designed for accessibility
+
+Nudi's look follows accessibility practice, not decoration:
+
+- **Atkinson Hyperlegible** font, designed by the Braille Institute for people with low vision (shipped inside the extension, OFL licence)
+- **18px or larger text**, with three sizes (Large / Larger / Largest) that are remembered across websites
+- **At least 7:1 contrast** for all text (WCAG AAA)
+- **Large targets**: every button is at least 56px tall and has a "pressable" bottom edge
+- **Keyboard friendly**: a thick yellow focus highlight, **Alt+Shift+N** to open, **Escape** to close
+- **Screen reader friendly**: real headings, labelled buttons, and spoken status updates (`role="status"`)
+- **Calm by default**: no gradients or flashing, and animations turn off when the computer asks for reduced motion
+- **Safe default**: in the payment check, the big button is **"No, do not pay"**
+
 ---
 
 ## How it works
@@ -42,7 +55,9 @@ One click turns a busy page into a calm **Action View**:
 | Voice commands | `extension/src/lib/listen.ts`, `voiceCommands.ts` | Speech to text, then text to a command |
 | Payment guard | `extension/src/lib/paymentGuard.ts` | "Before you pay" dialog |
 | Voice | `extension/src/lib/voice.ts` | ElevenLabs audio, or the browser's own voice |
-| Look and feel | `extension/src/lib/styles.ts`, `icons.ts` | All CSS and SVG icons |
+| Panel parts | `extension/src/lib/panelParts.ts`, `controls.ts` | Header, verdict, choices, notices, bottom controls |
+| Settings | `extension/src/lib/settings.ts` | Text size, voice on/off, slow voice (saved in Chrome) |
+| Look and feel | `extension/src/lib/styles.ts`, `icons.ts`, `fonts.ts` | Design system, logo, icons, font loading |
 | API | `backend/app/main.py` | `/health`, `/simplify`, `/ask`, `/speak`, `/demo/` |
 | Answers | `backend/app/services/mock_answers.py` | Offline answers for Ask Nudi |
 | Scam rules | `backend/app/risk_rules.py` | Phrase rules that always run |
@@ -89,18 +104,18 @@ npm run build
 1. Open `chrome://extensions` in Chrome
 2. Turn on **Developer mode** (top right)
 3. Click **Load unpacked** and choose the `extension/dist` folder
-4. Pin Nudi to the toolbar
+4. Pin Nudi to the toolbar. You can also open it with **Alt+Shift+N**.
 
 ### 3. Try the demo
 
 1. Open http://localhost:8787/demo/ (a fake, cluttered bill-payment page)
 2. Click the Nudi icon, then **Help me with this page**
 3. You should see a **Risky page** meter, three big buttons (**Pay ₹1,339 now 🔒**, **Download bill**, **See past bills**), and Nudi reading it aloud.
-4. Tap **Show me** next to Pay. The page dims and the real PAY button glows.
-5. Under **Watch out**, tap **Fix it for me**. The ₹99 protection plan is unticked, and the total becomes ₹1,240.
+4. Tap **Show me where it is** under Pay. The page dims and the real PAY button glows.
+5. Under **Things to watch out for**, tap **Remove it for me**. The ₹99 protection plan is unticked, and the total becomes ₹1,240.
 6. Tap the chip **How much do I pay?**. Nudi answers "The total to pay is ₹1,240".
-7. Tap **Talk** and say **"option two"** or **"is this page safe?"** (Chrome asks for the microphone once).
-8. Tap **Pay**. The **Before you pay** dialog shows ₹1,240 in large text. **No, stop** is the default.
+7. Tap **Talk to Nudi** and say **"option two"** or **"is this page safe?"** (Chrome asks for the microphone once).
+8. Tap **Pay**. The **Check before you pay** dialog shows ₹1,240 in large text. **No, do not pay** is the default (Escape also means no).
 9. Close Nudi and click the page's own **PAY** button. Nudi still stops and asks.
 10. Try the second demo, http://localhost:8787/demo/kyc-scam.html: a fake "update your KYC" bank scam.
 
