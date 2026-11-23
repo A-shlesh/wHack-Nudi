@@ -1,0 +1,4 @@
+# Everything for running and testing on your own computer.
+-r requirements.txt
+uvicorn
+pytest

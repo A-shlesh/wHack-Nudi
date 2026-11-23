@@ -1,0 +1,135 @@
+# AWS SAM template: runs the Nudi backend in the cloud.
+#
+#   API Gateway (HTTP API)  ->  one Lambda function (FastAPI via Mangum)
+#                               -> 3 DynamoDB tables (Family Link)
+#                               -> Amazon Bedrock (optional AI)
+#
+# Region: ap-south-1 (Mumbai), close to users in India. Claude Haiku on Bedrock
+# is not hosted in Mumbai itself, but it can be called FROM Mumbai through the
+# "global" cross-region inference profile (global.anthropic.claude-haiku-5-5).
+#
+# Secrets (the ElevenLabs key) are passed at deploy time as a NoEcho
+# parameter. They are never written in this file or in the repo.
+# Deploy:  see "Deploy to AWS" in README.md.
+
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Nudi backend - web helper for elderly users (FastAPI on Lambda)
+
+Parameters:
+  BedrockModelId:
+    Type: String
+    Default: global.anthropic.claude-haiku-5-5
+    Description: Bedrock inference profile. Leave empty to use the offline mock AI.
+  ElevenLabsApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Optional. Leave empty to use the browser voice.
+  ElevenLabsVoiceId:
+    Type: String
+    Default: ""
+    Description: Optional ElevenLabs voice id.
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Timeout: 20
+    MemorySize: 512
+
+Resources:
+  # ---------- Web address ----------
+  NudiHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      # Slow down anyone hammering the API (protects the Bedrock / ElevenLabs bill).
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
+      CorsConfiguration:
+        AllowOrigins: ["*"]
+        AllowMethods: ["GET", "POST", "OPTIONS"]
+        AllowHeaders: ["Content-Type", "Authorization"]
+
+  # ---------- The app ----------
+  NudiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: app.lambda_handler.handler
+      Description: Nudi FastAPI backend
+      Environment:
+        Variables:
+          FAMILIES_TABLE: !Ref FamiliesTable
+          EVENTS_TABLE: !Ref EventsTable
+          APPROVALS_TABLE: !Ref ApprovalsTable
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          ELEVENLABS_API_KEY: !Ref ElevenLabsApiKey
+          ELEVENLABS_VOICE_ID: !Ref ElevenLabsVoiceId
+      Policies:
+        # Read/write ONLY these three tables.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref FamiliesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EventsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApprovalsTable
+        # Call Anthropic models on Bedrock (through inference profiles) and nothing else.
+        - Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource:
+                - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
+                - arn:aws:bedrock:*::foundation-model/anthropic.*
+      Events:
+        AllRoutes:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref NudiHttpApi
+
+  # Keep logs for 7 days only (CloudWatch).
+  NudiLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${NudiFunction}
+      RetentionInDays: 7
+
+  # ---------- Family Link storage (pay per request: no cost when idle) ----------
+  FamiliesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: family_id, AttributeType: S }
+      KeySchema:
+        - { AttributeName: family_id, KeyType: HASH }
+
+  EventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: family_id, AttributeType: S }
+        - { AttributeName: id, AttributeType: S }
+      KeySchema:
+        - { AttributeName: family_id, KeyType: HASH }
+        - { AttributeName: id, KeyType: RANGE }
+
+  ApprovalsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: family_id, AttributeType: S }
+        - { AttributeName: id, AttributeType: S }
+      KeySchema:
+        - { AttributeName: family_id, KeyType: HASH }
+        - { AttributeName: id, KeyType: RANGE }
+
+Outputs:
+  ApiUrl:
+    Description: Put this in extension/src/config.ts (BACKEND_URL)
+    Value: !Sub https://${NudiHttpApi}.execute-api.${AWS::Region}.amazonaws.com
+  DashboardUrl:
+    Description: Family dashboard (open on a phone)
+    Value: !Sub https://${NudiHttpApi}.execute-api.${AWS::Region}.amazonaws.com/dashboard/
