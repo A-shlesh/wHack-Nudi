@@ -31,9 +31,15 @@ export interface SimplifyResponse {
   mode: "bedrock" | "mock";
 }
 
+export interface AskResponse {
+  answer: string;
+  mode: "bedrock" | "mock";
+}
+
 // Messages sent from the content script / popup to the background worker.
 export type BackgroundRequest =
   | { type: "simplify"; page: PageSnapshot }
+  | { type: "ask"; question: string; page: PageSnapshot }
   | { type: "speak"; text: string }
   | { type: "health" };
 

@@ -5,7 +5,7 @@
 //      button on the real page, and asks first there too.
 
 import { visibleLabel } from "./pageReader";
-import { createOverlayHost } from "./ui";
+import { createOverlayHost, el, iconButton, iconSpan } from "./ui";
 import { speak } from "./voice";
 
 // Same lists as backend/app/risk_rules.py. English words are matched as whole
@@ -19,24 +19,63 @@ export function looksLikePayment(label: string): boolean {
   return PAYMENT_PATTERN.test(label) || NATIVE_PAYMENT_WORDS.some((word) => label.includes(word));
 }
 
+/** Find a money amount such as "₹1,339" or "Rs. 500" in a button label. */
+function findAmount(label: string): string | null {
+  const match = label.match(/(?:₹|rs\.?|inr)\s?\d[\d,]*(?:\.\d+)?/i);
+  return match ? match[0] : null;
+}
+
+// Three quick questions to make the user pause and think before paying.
+const CHECKLIST = [
+  "This is the website I meant to use",
+  "I know who I am paying, and why",
+  "Nobody on the phone is telling me to do this",
+];
+
 /** Show a big Yes / No question. Resolves true only if the user taps Yes. */
 export function confirmPayment(actionLabel: string): Promise<boolean> {
-  const { host, root } = createOverlayHost("nudi-confirm");
-  const question = `This will spend money: "${actionLabel}". Do you want to continue?`;
+  const { host, app } = createOverlayHost("nudi-confirm");
+  const amount = findAmount(actionLabel);
 
-  // Only fixed text goes into innerHTML. Page text is added below with textContent.
-  root.innerHTML += `
-    <div class="backdrop">
-      <div class="dialog" role="alertdialog" aria-modal="true">
-        <p class="big">⚠️ Please check</p>
-        <p class="question"></p>
-        <p class="small">Check the amount. Nudi never sees your card, OTP or password.</p>
-        <button class="yes">Yes, pay</button>
-        <button class="no">No, stop</button>
-      </div>
-    </div>`;
-  root.querySelector(".question")!.textContent = question;
-  speak(question);
+  const dialog = el("div", "dialog");
+  dialog.setAttribute("role", "alertdialog");
+  dialog.setAttribute("aria-modal", "true");
+
+  const iconBox = el("div", "dialog-icon");
+  iconBox.append(iconSpan("lock", 28));
+  dialog.append(iconBox, el("h2", "", "Before you pay"));
+  dialog.append(el("div", "", `You pressed: "${actionLabel}"`));
+
+  if (amount) {
+    const box = el("div", "amount");
+    box.append(el("div", "amount-label", "Amount"), el("div", "amount-value", amount));
+    dialog.append(box);
+  }
+
+  const list = el("ul", "checklist");
+  for (const item of CHECKLIST) {
+    const li = el("li", "");
+    li.append(iconSpan("check", 18), el("span", "", item));
+    list.append(li);
+  }
+  dialog.append(list);
+
+  const no = iconButton("big-btn no", "close", "No, stop");
+  const yes = iconButton("big-btn yes", "check", amount ? `Yes, pay ${amount}` : "Yes, continue");
+  const buttons = el("div", "dialog-buttons");
+  buttons.append(no, yes);
+  const note = el("div", "privacy-note");
+  note.append(iconSpan("shield", 16), el("span", "", "Nudi never sees your card, OTP or password."));
+  dialog.append(buttons, note);
+
+  const backdrop = el("div", "backdrop");
+  backdrop.append(dialog);
+  app.append(backdrop);
+
+  const spoken = amount
+    ? `Before you pay ${amount}. Is this the right website, and do you know who you are paying? Tap No to stop, or Yes to pay.`
+    : `This will spend money. Tap No to stop, or Yes to continue.`;
+  speak(spoken);
 
   return new Promise((resolve) => {
     const finish = (answer: boolean) => {
@@ -45,11 +84,11 @@ export function confirmPayment(actionLabel: string): Promise<boolean> {
     };
     // isTrusted is only true for a real tap or key press by the person,
     // never for a fake click made by the website's own code.
-    root.querySelector<HTMLButtonElement>(".yes")!.onclick = (event) => {
+    yes.onclick = (event) => {
       if (event.isTrusted) finish(true);
     };
-    root.querySelector<HTMLButtonElement>(".no")!.onclick = () => finish(false);
-    root.querySelector<HTMLButtonElement>(".no")!.focus(); // the safe choice is the default
+    no.onclick = () => finish(false);
+    no.focus(); // the safe choice is the default
   });
 }
 

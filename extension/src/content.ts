@@ -16,17 +16,15 @@ if (!nudiWindow.nudiGuardInstalled) {
   nudiWindow.nudiGuardInstalled = true;
 }
 
-async function start(): Promise<void> {
-  showMessage("Nudi", "One moment, I am reading this page for you…");
+/** quiet = true when we refresh after a fix, so Nudi does not repeat everything aloud. */
+async function start(quiet = false): Promise<void> {
+  if (!quiet) showMessage("Reading this page…", "One moment. I am making it simple for you.", true);
   try {
     const page = readPage();
     const result = await askBackground<SimplifyResponse>({ type: "simplify", page });
-    showActionView(result);
+    showActionView(result, page, () => start(true), quiet);
   } catch (error) {
-    showMessage(
-      "Nudi cannot connect",
-      "The Nudi helper server is not running. Please start it and try again.",
-    );
+    showMessage("I cannot connect", "The Nudi helper server is not running. Please start it and try again.");
     console.error("Nudi:", error);
   }
 }

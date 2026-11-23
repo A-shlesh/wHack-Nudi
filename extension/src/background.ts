@@ -33,6 +33,11 @@ async function handle(request: BackgroundRequest): Promise<unknown> {
       if (!response.ok) throw new Error(`Backend error ${response.status}`);
       return response.json();
     }
+    case "ask": {
+      const response = await postJson("/ask", { question: request.question, page: request.page });
+      if (!response.ok) throw new Error(`Backend error ${response.status}`);
+      return response.json();
+    }
     case "speak": {
       const response = await postJson("/speak", { text: request.text });
       // 204 means "no cloud voice, use the browser voice" -> return null.

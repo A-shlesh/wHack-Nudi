@@ -4,14 +4,19 @@
 import { askBackground } from "./lib/messages";
 
 const status = document.getElementById("status")!;
+const dot = document.getElementById("dot")!;
 const helpButton = document.getElementById("help")!;
 
 async function showStatus(): Promise<void> {
   try {
     const health = await askBackground<{ ai: string; voice: string }>({ type: "health" });
-    status.textContent = `Helper server: on (AI: ${health.ai}, voice: ${health.voice})`;
+    const ai = health.ai === "bedrock" ? "AWS Bedrock" : "demo AI";
+    const voice = health.voice === "elevenlabs" ? "ElevenLabs voice" : "browser voice";
+    dot.className = "status-dot on";
+    status.textContent = `Ready · ${ai} · ${voice}`;
   } catch {
-    status.textContent = "Helper server is OFF. Start the backend first.";
+    dot.className = "status-dot off";
+    status.textContent = "Helper server is off. Start the backend first.";
   }
 }
 
