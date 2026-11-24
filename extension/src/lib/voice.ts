@@ -25,12 +25,46 @@ export function stopSpeaking(): void {
   onSpeakingChange(false);
 }
 
+// Clearest voices first. Chrome's "Google" voices sound the most natural (they
+// need internet); the Microsoft ones work offline. "Microsoft Heera" (Indian
+// English) sounds slow and robotic, so it is only used if nothing else exists.
+const PREFERRED_VOICES = [
+  "Google UK English Female",
+  "Google US English",
+  "Google UK English Male",
+  "Microsoft Zira",
+  "Microsoft Mark",
+  "Microsoft David",
+  "Microsoft Ravi",
+];
+
+function pickVoice(): SpeechSynthesisVoice | null {
+  const voices = speechSynthesis.getVoices();
+  for (const name of PREFERRED_VOICES) {
+    const voice = voices.find((v) => v.name.startsWith(name));
+    if (voice) return voice;
+  }
+  return voices.find((v) => v.lang.startsWith("en")) ?? null;
+}
+
+// Chrome loads its voice list a moment after the page starts; ask early.
+speechSynthesis.getVoices();
+
 function speakWithBrowser(text: string): void {
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "en-IN";
-  utterance.rate = 1; // normal speed
-  utterance.onend = () => onSpeakingChange(false);
-  speechSynthesis.speak(utterance);
+  const voice = pickVoice();
+  // Say "₹1,339" as "1,339 rupees": many voices cannot read the ₹ sign.
+  const spoken = text.replace(/₹\s?(\d[\d,]*(\.\d+)?)/g, "$1 rupees");
+  // One sentence at a time: Chrome's Google voices can stop in the middle of long text.
+  const sentences = spoken.match(/[^.!?]+[.!?]*/g) ?? [spoken];
+  sentences.forEach((sentence, index) => {
+    const utterance = new SpeechSynthesisUtterance(sentence.trim());
+    if (voice) utterance.voice = voice;
+    utterance.lang = voice?.lang ?? "en-IN";
+    // Normal speed. Heera sounds slow, so she gets a small push if she is the only voice.
+    utterance.rate = voice?.name.includes("Heera") ? 1.15 : 1;
+    if (index === sentences.length - 1) utterance.onend = () => onSpeakingChange(false);
+    speechSynthesis.speak(utterance);
+  });
 }
 
 /** Speak only if the user has the voice turned on. */
