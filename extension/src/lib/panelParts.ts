@@ -31,18 +31,19 @@ function overallLevel(trust: TrustResult | null, warnings: PageWarning[]): Level
   return "safe";
 }
 
-export function buildVerdict(trust: TrustResult | null, warnings: PageWarning[], onSeeWhy: () => void): HTMLElement {
+export function buildVerdict(trust: TrustResult | null, warnings: PageWarning[]): HTMLElement {
   const level = overallLevel(trust, warnings);
   const scamSite = trust?.level === "danger";
 
+  // One short line under the title. The details are folded under "Why?".
   const [title, text] =
     level === "risky"
       ? scamSite
-        ? ["This website looks like a scam", "Do not pay or share any details here. Nudi will block payments on this website."]
-        : ["This page looks risky", "I found signs of a scam on this page. Please do not share any personal details."]
+        ? ["This website looks like a scam", "Do not pay here. Nudi will block payments."]
+        : ["This page looks risky", "Do not share any personal details here."]
       : level === "careful"
-        ? ["Be careful on this page", "Something here needs a second look. Take your time."]
-        : ["This website looks safe", "I did not find any tricks. Still, never share your OTP."];
+        ? ["Be careful on this page", "Something here needs a second look."]
+        : ["This website looks safe", "I did not find any tricks."];
 
   const verdict = el("section", `verdict ${level}`);
   verdict.setAttribute("aria-label", "Safety check");
@@ -51,10 +52,8 @@ export function buildVerdict(trust: TrustResult | null, warnings: PageWarning[],
   heading.append(iconSpan(level === "safe" ? "shield" : "alert", 26), el("span", "", title));
   verdict.append(heading, el("p", "", text));
 
-  // Website trust: the domain, a score bar, and the reasons in plain words.
+  // Website trust: the domain and a score bar.
   if (trust) {
-    const site = el("div", "trust-site");
-    site.append(el("span", "", "Website: "), el("strong", "", trust.domain));
     const meter = el("div", "meter");
     meter.setAttribute("role", "meter");
     meter.setAttribute("aria-label", "Website trust score");
@@ -64,20 +63,20 @@ export function buildVerdict(trust: TrustResult | null, warnings: PageWarning[],
     const fill = el("div", `meter-fill ${trust.level}`);
     fill.style.width = `${Math.max(4, trust.trust_score)}%`;
     meter.append(fill);
-    const score = el("div", "meter-label", `Trust score: ${trust.trust_score} out of 100`);
-    verdict.append(site, meter, score);
-
-    if (trust.reasons.length > 0) {
-      const list = el("ul", "trust-reasons");
-      for (const reason of trust.reasons) list.append(el("li", "", reason.message_simple));
-      verdict.append(list);
-    }
+    verdict.append(meter, el("div", "meter-label", `${trust.domain} · trust ${trust.trust_score} out of 100`));
   }
 
-  if (warnings.length > 0) {
-    const seeWhy = el("button", "link-btn", `See what I found on this page (${warnings.length})`);
-    seeWhy.onclick = onSeeWhy;
-    verdict.append(seeWhy);
+  // "Why?": the website reasons and the page warnings, together, folded.
+  const reasons: PageWarning[] = [
+    ...(trust?.reasons ?? [])
+      .filter((r) => r.code !== "LOCAL")
+      .map((r) => ({ level: trust!.level === "safe" ? "info" : trust!.level, message: r.message_simple }) as PageWarning),
+    ...[...warnings].sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]),
+  ];
+  if (reasons.length > 0) {
+    const why = buildFold(`Why? (${reasons.length})`, false);
+    reasons.forEach((r) => why.body.append(buildWarning(r)));
+    verdict.append(why.fold);
   }
   return verdict;
 }
@@ -110,7 +109,9 @@ export function buildChoice(
   return item;
 }
 
-// ---------- Watch out ----------
+// ---------- Warnings ----------
+
+const LEVEL_ORDER = { danger: 0, caution: 1, info: 2 };
 
 export function buildWarning(warning: PageWarning): HTMLElement {
   const notice = el("div", `notice ${warning.level}`);
@@ -118,22 +119,17 @@ export function buildWarning(warning: PageWarning): HTMLElement {
   return notice;
 }
 
-const LEVEL_ORDER = { danger: 0, caution: 1, info: 2 };
-const SHOWN_AT_FIRST = 2;
+// ---------- Folded sections ----------
 
-/** Warnings, most serious first. Only the first two are shown until "Show more" is tapped. */
-export function buildWarningList(warnings: PageWarning[]): HTMLElement {
-  const list = el("div", "");
-  const sorted = [...warnings].sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]);
-  sorted.slice(0, SHOWN_AT_FIRST).forEach((w) => list.append(buildWarning(w)));
-
-  const hidden = sorted.slice(SHOWN_AT_FIRST);
-  if (hidden.length > 0) {
-    const more = el("button", "link-btn", `Show ${hidden.length} more`);
-    more.onclick = () => more.replaceWith(...hidden.map(buildWarning));
-    list.append(more);
-  }
-  return list;
+/** A section that opens and closes when its title is tapped (keeps the panel short). */
+export function buildFold(title: string, open: boolean, extra = ""): { fold: HTMLDetailsElement; body: HTMLElement } {
+  const fold = el("details", "fold") as HTMLDetailsElement;
+  fold.open = open;
+  const summary = el("summary", "", title);
+  if (extra) summary.append(el("span", "fold-extra", extra));
+  const body = el("div", "fold-body");
+  fold.append(summary, body);
+  return { fold, body };
 }
 
 /** A "Remove it for me" card for a sneaky extra. apply() does the fix in the page. */

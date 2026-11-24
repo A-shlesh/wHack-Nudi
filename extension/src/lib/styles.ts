@@ -270,7 +270,28 @@ export const STYLES = `
   .trust-reasons li { margin: 4px 0; }
 
   /* Family */
-  .family { margin-top: 30px; padding-top: 4px; border-top: 1px solid var(--line); }
+  .family .fold-body > p:first-child { margin-top: 0; }
+
+  /* Folded sections: a big tappable title row with an arrow; the content opens below. */
+  .fold { margin-top: 14px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; }
+  .fold > summary {
+    list-style: none; cursor: pointer; min-height: 56px; padding: 0 16px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: calc(19px * var(--scale)); font-weight: 700;
+  }
+  .fold > summary::-webkit-details-marker { display: none; }
+  .fold > summary::after {
+    content: ""; width: 10px; height: 10px; margin-left: 6px; flex: none;
+    border-right: 3px solid var(--ink); border-bottom: 3px solid var(--ink);
+    transform: rotate(45deg); transition: transform 0.15s;
+  }
+  .fold[open] > summary::after { transform: rotate(-135deg); }
+  .fold > summary:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; box-shadow: 0 0 0 6px var(--focus); }
+  .fold-extra { margin-left: auto; font-size: 14px; color: var(--ink-2); }
+  .fold-body { padding: 4px 16px 16px; }
+  .verdict .fold { margin-top: 12px; background: rgba(255, 255, 255, 0.6); }
+  .verdict .fold > summary { font-size: calc(17px * var(--scale)); min-height: 48px; }
+  .body > .notice.fix, .body > .notice.done { margin-top: 18px; }
   .family .btn { margin-top: 12px; }
   .family .ask-input { width: 100%; }
   .pair-code {

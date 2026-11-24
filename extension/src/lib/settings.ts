@@ -2,15 +2,13 @@
 // the same on every website and after a restart.
 //   textSize: 0 = large, 1 = larger, 2 = largest
 //   voiceOn:  read things aloud automatically
-//   slowVoice: speak more slowly
 
 export interface Settings {
   textSize: 0 | 1 | 2;
   voiceOn: boolean;
-  slowVoice: boolean;
 }
 
-const DEFAULTS: Settings = { textSize: 0, voiceOn: true, slowVoice: true };
+const DEFAULTS: Settings = { textSize: 0, voiceOn: true };
 
 // How much bigger each text size makes everything.
 export const TEXT_SCALES = [1, 1.15, 1.3];

@@ -7,6 +7,7 @@
 
 import type { FamilyState } from "../types";
 import { askBackground } from "./messages";
+import { buildFold } from "./panelParts";
 import { el } from "./ui";
 import { speak } from "./voice";
 
@@ -33,7 +34,11 @@ function sharedList(): HTMLElement {
 
 /** Build the section. onChange is called when pairing state changes (to redraw the header badge). */
 export function buildFamilySection(onChange: (state: FamilyState) => void): HTMLElement {
-  const section = el("section", "family");
+  // A folded section titled "Family"; the right side shows the status at a glance.
+  const { fold, body } = buildFold("Family", false);
+  fold.classList.add("family");
+  const statusTag = el("span", "fold-extra");
+  fold.querySelector("summary")!.append(statusTag);
   let timer: number | undefined;
   let lastStatus = "";
 
@@ -42,13 +47,17 @@ export function buildFamilySection(onChange: (state: FamilyState) => void): HTML
       const state = await askBackground<FamilyState>(request);
       draw(state);
     } catch {
-      section.replaceChildren(el("h2", "", "Family"), el("p", "muted", "The Nudi helper server is not reachable right now."));
+      body.replaceChildren(el("p", "muted", "The Nudi helper server is not reachable right now."));
     }
   }
 
   function draw(state: FamilyState): void {
     window.clearTimeout(timer);
-    const heading = el("h2", "", "Family");
+    statusTag.textContent =
+      state.status === "paired" ? (state.sharingOn ? "Sharing ON" : "Paused")
+      : state.status === "none" ? "Not connected" : "Connecting…";
+    // Open by itself when the elder must act (show the code, or Allow / Don't allow).
+    if (state.status === "waiting" || state.status === "request") fold.open = true;
 
     if (state.status === "none") {
       const nameLabel = el("label", "ask-label", "Your name (your family will see this)");
@@ -58,8 +67,7 @@ export function buildFamilySection(onChange: (state: FamilyState) => void): HTML
       nameLabel.setAttribute("for", nameInput.id);
       const connect = el("button", "btn secondary", "Connect family");
       connect.onclick = () => call({ type: "family:start", elderName: nameInput.value.trim() || "Ajji" });
-      section.replaceChildren(
-        heading,
+      body.replaceChildren(
         el("p", "", "Let a family member help you check payments from their phone."),
         nameLabel,
         nameInput,
@@ -71,8 +79,7 @@ export function buildFamilySection(onChange: (state: FamilyState) => void): HTML
       code.setAttribute("aria-label", `Code ${state.pairCode}`);
       const cancel = el("button", "link-btn", "Cancel");
       cancel.onclick = () => call({ type: "family:disconnect" });
-      section.replaceChildren(
-        heading,
+      body.replaceChildren(
         el("p", "", "Ask your family member to open the Nudi family page and type this code:"),
         code,
         el("p", "muted", "The code works for 10 minutes."),
@@ -86,7 +93,7 @@ export function buildFamilySection(onChange: (state: FamilyState) => void): HTML
       deny.onclick = () => call({ type: "family:answer", allow: false });
       const buttons = el("div", "controls-row");
       buttons.append(allow, deny);
-      section.replaceChildren(heading, el("p", "request-text", `${who} wants to connect. Allow?`), sharedList(), buttons);
+      body.replaceChildren(el("p", "request-text", `${who} wants to connect. Allow?`), sharedList(), buttons);
       if (lastStatus !== "request") speak(`${who} wants to connect. Do you want to allow it?`);
     } else {
       const toggle = el("button", "toggle");
@@ -98,7 +105,7 @@ export function buildFamilySection(onChange: (state: FamilyState) => void): HTML
       const status = state.sharingOn
         ? `Connected to ${state.familyName}. ${state.familyName} can help you with payments.`
         : `Sharing is paused. ${state.familyName} sees nothing new until you turn it back on.`;
-      section.replaceChildren(heading, el("p", "", status), toggle, sharedList(), disconnect);
+      body.replaceChildren(el("p", "", status), toggle, sharedList(), disconnect);
     }
 
     lastStatus = state.status;
@@ -110,5 +117,5 @@ export function buildFamilySection(onChange: (state: FamilyState) => void): HTML
   }
 
   call({ type: "family:state" });
-  return section;
+  return fold;
 }

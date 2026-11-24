@@ -2,13 +2,11 @@
 // so it never covers the page, and it follows you from page to page.
 //
 // For the page in the current tab it shows, top to bottom:
-//   1. Safety verdict: website trust check + warnings found on the page
-//   2. A short summary
-//   3. "What would you like to do?": big numbered choices + "Show me where it is"
-//   4. "Things to watch out for": "Remove it for me" fixes + warnings
-//   5. "Ask a question"
-//   6. Family Link
-//   7. Controls: Read aloud, Talk, text size, voice on/off
+//   1. Safety verdict (website trust + page warnings; details folded under "Why?")
+//   2. "What would you like to do?": big numbered choices + "Show me where it is"
+//   3. "Remove it for me" cards, if Nudi found a sneaky extra
+//   4. "Ask a question" and "Family": folded, tap to open
+//   5. Controls: Read aloud, Talk, text size, voice on/off
 //
 // The panel never touches the page itself; it sends small messages to the
 // content script (content.ts), which does the work inside the page.
@@ -17,7 +15,7 @@ import { createAskBox, type AskBox } from "./lib/askBox";
 import { applyTextSize, buildControls } from "./lib/controls";
 import { buildFamilySection } from "./lib/familyPanel";
 import { askBackground } from "./lib/messages";
-import { buildChoice, buildFix, buildHeader, buildVerdict, buildWarningList } from "./lib/panelParts";
+import { buildChoice, buildFix, buildFold, buildHeader, buildVerdict } from "./lib/panelParts";
 import { loadSettings } from "./lib/settings";
 import { STYLES } from "./lib/styles";
 import { el } from "./lib/ui";
@@ -79,13 +77,17 @@ function showMessage(title: string, message: string, loading = false): void {
   app.replaceChildren(panel);
 }
 
-/** The words Nudi says out loud: verdict, summary, then the choices. */
+/** What Nudi says when a page opens: short. The verdict, then the choices. */
 function spokenText(result: SimplifyResponse, trust: TrustResult | null): string {
   const parts: string[] = [];
-  if (trust?.level === "danger") parts.push(`Warning. This website looks like a scam. ${trust.reasons[0]?.message_simple ?? ""}`);
-  parts.push(result.summary);
-  result.warnings.filter((w) => w.level === "danger").forEach((w) => parts.push(`Warning. ${w.message}`));
-  result.actions.forEach((a, i) => parts.push(`Option ${i + 1}: ${a.label}.`));
+  if (trust?.level === "danger") parts.push("Warning. This website looks like a scam. Do not pay here.");
+  else if (result.warnings.some((w) => w.level === "danger")) parts.push("Warning. This page looks risky.");
+  else if (trust?.level === "caution" || result.warnings.length > 0) parts.push("Be careful on this page.");
+  else parts.push("This website looks safe.");
+  if (result.actions.length > 0) {
+    parts.push("You can:");
+    result.actions.forEach((a, i) => parts.push(`${i + 1}, ${a.label}.`));
+  }
   return parts.join(" ");
 }
 
@@ -94,16 +96,11 @@ function render(read: PageReadResult, result: SimplifyResponse, trust: TrustResu
   const panel = el("div", "panel docked");
   panel.append(buildHeader(familySharing));
 
+  // Only the verdict and the choices are open. Everything else is folded,
+  // so the panel is not a wall of text.
   const body = el("div", "body");
-  const watchOutHeading = el("h2", "", "Things to watch out for");
-  watchOutHeading.setAttribute("tabindex", "-1");
-  body.append(
-    buildVerdict(trust, result.warnings, () => {
-      watchOutHeading.scrollIntoView({ behavior: "smooth", block: "start" });
-      watchOutHeading.focus({ preventScroll: true });
-    }),
-    el("p", "summary", result.summary),
-  );
+  body.append(buildVerdict(trust, result.warnings));
+  if (result.mode === "bedrock") body.append(el("p", "summary", result.summary)); // the mock summary adds nothing
 
   // 1. Choices
   body.append(el("h2", "", "What would you like to do?"));
@@ -121,35 +118,36 @@ function render(read: PageReadResult, result: SimplifyResponse, trust: TrustResu
   if (result.actions.length === 0) body.append(el("p", "muted", "I could not find clear actions on this page."));
   body.append(choices);
 
-  // 2. Fixes, then warnings
-  if (result.warnings.length > 0 || read.fixes.length > 0) {
-    body.append(watchOutHeading);
-    read.fixes.forEach((message, index) =>
-      body.append(
-        buildFix(
-          message,
-          () => sendToPage({ type: "nudi:fix", index }),
-          () => {
-            speak("Done. I removed the extra. Please check the new total.");
-            setTimeout(() => analyze(true), 2000); // the page changed: read it again
-          },
-        ),
+  // 2. Fixes: shown open, because they are something Nudi can DO for you.
+  read.fixes.forEach((message, index) =>
+    body.append(
+      buildFix(
+        message,
+        () => sendToPage({ type: "nudi:fix", index }),
+        () => {
+          speak("Done. I removed the extra. Please check the new total.");
+          setTimeout(() => analyze(true), 2000); // the page changed: read it again
+        },
       ),
-    );
-    body.append(buildWarningList(result.warnings));
-  }
+    ),
+  );
 
-  // 3. Questions
+  // 3. Questions (folded)
   const askBox: AskBox = createAskBox(read.page);
-  body.append(el("h2", "", "Ask a question"), askBox.element);
+  const askFold = buildFold("Ask a question", false);
+  askFold.body.append(askBox.element);
+  body.append(askFold.fold);
 
-  // 4. Family
+  // 4. Family (folded; it opens by itself when someone asks to connect)
   body.append(buildFamilySection(onFamilyChange));
 
   const controls = buildControls({
     app,
     readText: () => spokenText(result, trust),
-    onHeard: (said) => handleSpoken(said, result, askBox),
+    onHeard: (said) => {
+      askFold.fold.open = true; // so a spoken question's answer is visible
+      handleSpoken(said, result, askBox);
+    },
   });
 
   panel.append(body, controls);

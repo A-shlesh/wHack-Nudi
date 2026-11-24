@@ -1,7 +1,7 @@
 // Reads text aloud. First tries the natural ElevenLabs voice (through the
 // backend). If that is not set up, or fails, it uses the browser's own
 // built-in voice (speechSynthesis), so narration always works.
-// Follows the user's settings: voice on/off and slow voice.
+// Follows the user's setting: voice on/off. Speaks at normal speed.
 
 import { askBackground } from "./messages";
 import { getSettings } from "./settings";
@@ -28,7 +28,7 @@ export function stopSpeaking(): void {
 function speakWithBrowser(text: string): void {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "en-IN";
-  utterance.rate = getSettings().slowVoice ? 0.8 : 1;
+  utterance.rate = 1; // normal speed
   utterance.onend = () => onSpeakingChange(false);
   speechSynthesis.speak(utterance);
 }
@@ -49,7 +49,6 @@ export async function speakAlways(text: string): Promise<void> {
     if (myTurn !== speechTurn) return; // something newer started, or the view was closed
     if (audioUrl) {
       currentAudio = new Audio(audioUrl);
-      currentAudio.playbackRate = getSettings().slowVoice ? 0.9 : 1;
       currentAudio.onended = () => onSpeakingChange(false);
       await currentAudio.play();
       return;
