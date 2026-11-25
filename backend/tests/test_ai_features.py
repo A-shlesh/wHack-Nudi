@@ -145,3 +145,75 @@ def test_private_numbers_are_hidden_before_reaching_ai(client, ai):
     assert "123456" not in prompt
     assert "4111" not in prompt
     assert "[hidden]" in prompt
+
+
+# ---------- The structured decision: watch / ask_family / block ----------
+
+SCAM_TEXT = "Your KYC will expire today. Your account will be blocked."
+
+
+def test_offline_decision_is_watch_on_a_normal_page(client):
+    decision = client.post("/simplify", json=PAGE).json()["decision"]
+    assert decision == {"action": "watch", "reasons": [], "source": "rules"}
+
+
+def test_offline_danger_rule_means_ask_family(client):
+    decision = client.post("/simplify", json={**PAGE, "text": SCAM_TEXT}).json()["decision"]
+    assert decision["action"] == "ask_family"
+    assert decision["source"] == "rules"
+    assert any("KYC" in reason for reason in decision["reasons"])
+
+
+def test_ai_can_make_the_decision_stricter(client, ai):
+    ai(reply(decision={"action": "block", "reasons": ["It asks for an OTP to receive money."]}))
+    decision = client.post("/simplify", json=PAGE).json()["decision"]
+    assert decision == {"action": "block", "reasons": ["It asks for an OTP to receive money."], "source": "ai"}
+
+
+def test_ai_cannot_make_the_decision_milder(client, ai):
+    ai(reply(decision={"action": "watch", "reasons": []}))
+    decision = client.post("/simplify", json={**PAGE, "text": SCAM_TEXT}).json()["decision"]
+    assert decision["action"] == "ask_family"
+    assert decision["source"] == "rules"
+
+
+@pytest.mark.parametrize("bad", [
+    {"action": "approve", "reasons": ["Looks fine"]},  # not one of the three
+    {"action": "block"},  # stricter, but no reason to show the user
+    {"action": "block", "reasons": "not a list"},
+    "block",
+    None,
+])
+def test_broken_ai_decisions_are_ignored(client, ai, bad):
+    ai(reply(decision=bad))
+    body = client.post("/simplify", json=PAGE).json()
+    assert body["mode"] == "gemini"  # the rest of the AI reply is still used
+    assert body["decision"]["action"] == "watch"
+    assert body["decision"]["source"] == "rules"
+
+
+# ---------- Ask: the part of a long page that answers the question ----------
+
+from app.services.ai_features import relevant_text  # noqa: E402
+
+FILLER = "Apply for scholarships online with your student login. " * 80  # about 4,400 characters
+
+
+def test_relevant_text_finds_the_helpline_far_down_the_page():
+    text = FILLER + "Contact Us. SSP Helpline for technical issues: 1902, for all schemes."
+    found = relevant_text(text, "What is the phone number for SSP helpline?")
+    assert "1902" in found
+
+
+def test_relevant_text_is_empty_when_nothing_matches():
+    assert relevant_text(FILLER, "Where is the zebra?") == ""
+    assert relevant_text(FILLER, "what is it?") == ""  # only small words
+
+
+def test_ask_sends_the_matching_part_first(client, ai):
+    fake = ai("The SSP helpline is 1902.")
+    page = {**PAGE, "text": FILLER + "Contact Us. SSP Helpline for technical issues: 1902."}
+    client.post("/ask", json={"question": "What is the SSP helpline number?", "page": page})
+    prompt = fake.calls[0]
+    assert prompt.startswith("Parts of the page that match the question:")
+    assert prompt.index("1902") < prompt.index("Page text:")

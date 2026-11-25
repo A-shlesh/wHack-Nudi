@@ -8,7 +8,7 @@ import { isPrivateField, redactText } from "./sanitize";
 
 const MAX_ELEMENTS = 150;
 const MAX_LABEL_LENGTH = 200;
-const MAX_TEXT_LENGTH = 6000;
+const MAX_TEXT_LENGTH = 15000; // long pages (e.g. a "Contact us" at the bottom); the AI sees only the parts it needs
 
 /** True if the user can actually see the element. */
 function isVisible(element: HTMLElement): boolean {

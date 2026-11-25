@@ -104,26 +104,47 @@ async function playVoiceNote(approval) {
 
 // ---------- Approvals ----------
 
-const decided = new Map(); // approval id -> "approved" | "blocked" (shown for a while)
+// Two kinds of request: "payment" (may I pay?) and "site" (I think this website is fine).
+const decided = new Map(); // approval id -> { decision, kind } (shown for a while)
 const announced = new Set(); // approvals we already buzzed / spoke for
+
+const DECIDED_TEXT = {
+  payment: {
+    approved: "You approved the payment. Nudi will still ask them to confirm.",
+    blocked: "You blocked the payment. Nudi has stopped it.",
+  },
+  site: {
+    approved: "You said the website is fine. Nudi will stop warning them about it.",
+    blocked: "You said the website is not safe. Nudi will keep warning them.",
+  },
+};
 
 async function decide(approval, decision) {
   const response = await api(`/approvals/${approval.id}/decision`, {
     method: "POST",
     body: JSON.stringify({ decision }),
   });
-  if (response.ok) decided.set(approval.id, decision);
+  if (response.ok) decided.set(approval.id, { decision, kind: approval.kind || "payment" });
   refresh();
 }
 
 function approvalCard(approval, elderName) {
+  const isSite = approval.kind === "site";
   const card = el("article", "approval");
-  card.setAttribute("aria-label", "Payment request");
-  card.append(
-    el("h3", "", `${elderName} wants to pay`),
-    el("div", "amount", approval.amount || "an amount"),
-    el("div", "site", `to ${approval.site}`),
-  );
+  card.setAttribute("aria-label", isSite ? "Website check request" : "Payment request");
+  if (isSite) {
+    card.append(
+      el("h3", "", `${elderName} thinks this website is fine`),
+      el("div", "site big", approval.site),
+      el("p", "muted", "Nudi warned them about it. Only say yes if you know this is the real website."),
+    );
+  } else {
+    card.append(
+      el("h3", "", `${elderName} wants to pay`),
+      el("div", "amount", approval.amount || "an amount"),
+      el("div", "site", `to ${approval.site}`),
+    );
+  }
   if (approval.reasons.length) {
     card.append(el("p", "muted", "Nudi is worried because:"));
     const list = el("ul");
@@ -132,8 +153,8 @@ function approvalCard(approval, elderName) {
   }
   const voice = el("button", "btn voice", "▶ Play voice note");
   voice.onclick = () => playVoiceNote(approval);
-  const approve = el("button", "btn approve", "Approve");
-  const block = el("button", "btn block", "Block");
+  const approve = el("button", "btn approve", isSite ? "Yes, it is fine" : "Approve");
+  const block = el("button", "btn block", isSite ? "No, keep warning" : "Block");
   approve.onclick = () => decide(approval, "approved");
   block.onclick = () => decide(approval, "blocked");
   const buttons = el("div", "buttons");
@@ -156,9 +177,8 @@ function drawFeed(feed) {
 
   const approvals = $("approvals");
   approvals.replaceChildren();
-  for (const [id, decision] of decided) {
-    const text = decision === "approved" ? "You approved the payment. Nudi will still ask them to confirm." : "You blocked the payment. Nudi has stopped it.";
-    approvals.append(el("div", `decided ${decision}`, text));
+  for (const [id, { decision, kind }] of decided) {
+    approvals.append(el("div", `decided ${decision}`, DECIDED_TEXT[kind][decision]));
     setTimeout(() => decided.delete(id), 8000);
   }
   for (const approval of feed.pending) {
@@ -188,7 +208,7 @@ const DIGEST_EVERY_MS = 60_000; // the note changes slowly; this also saves the 
 let lastDigestAt = 0;
 let lastEventCount = -1;
 
-const AI_NAMES = { gemini: "Gemini AI", groq: "Groq AI", bedrock: "AWS Bedrock AI" };
+const AI_NAMES = { ollama: "an AI on their own computer (Ollama)", gemini: "Gemini AI", groq: "Groq AI", bedrock: "AWS Bedrock AI" };
 
 async function refreshDigest(eventCount) {
   const due = Date.now() - lastDigestAt > DIGEST_EVERY_MS || eventCount !== lastEventCount;

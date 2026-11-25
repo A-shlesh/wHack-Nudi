@@ -4,7 +4,7 @@
 //   nudi:run        do what a big choice says (payments always ask first)
 //   nudi:show-me    dim the page and point at one button
 //   nudi:fix        untick a sneaky extra
-//   nudi:set-trust  remember the website's trust result for the payment guard
+//   nudi:set-trust  remember the website's trust result and Nudi's decision for the payment guard
 // The payment guard is always on: it stops ANY "Pay" click to ask first.
 
 import { askBackground } from "./lib/messages";
@@ -68,7 +68,7 @@ if (!nudiWindow.nudiReady) {
         break;
       }
       case "nudi:set-trust":
-        setPageTrust(request.trust);
+        setPageTrust(request.trust, request.decision);
         sendResponse(true);
         break;
     }

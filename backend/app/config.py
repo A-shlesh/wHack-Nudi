@@ -27,9 +27,14 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "")
 GROQ_API_KEY = _key("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "")
 
-# Which AI to try first, second, third. Any without a key is skipped.
+# --- Ollama (free AI on this computer; nothing leaves the machine) ---
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "")  # empty = not used
+
+# Which AI to try first, second, third. Any that is not set up is skipped.
+# Ollama goes first: when it is set up, page text stays on this computer.
 # If none work, Nudi uses its own offline rules (mock mode).
-AI_ORDER = [name.strip() for name in os.getenv("AI_ORDER", "gemini,groq,bedrock").split(",") if name.strip()]
+AI_ORDER = [name.strip() for name in os.getenv("AI_ORDER", "ollama,gemini,groq,bedrock").split(",") if name.strip()]
 
 # --- AWS Bedrock (optional third AI) ---
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
@@ -44,6 +49,7 @@ USE_REAL_BEDROCK = bool(BEDROCK_MODEL_ID) and (_has_aws_keys or _has_bedrock_key
 def ai_providers() -> list[str]:
     """The AI services that are set up, in the order to try them. Empty = offline mode."""
     ready = {
+        "ollama": bool(OLLAMA_MODEL),
         "gemini": bool(GEMINI_API_KEY),
         "groq": bool(GROQ_API_KEY),
         "bedrock": USE_REAL_BEDROCK,

@@ -327,6 +327,53 @@ export const STYLES = `
   .answer-quote { margin: 6px 0 8px; padding-left: 10px; border-left: 3px solid var(--line-strong); color: var(--ink-2); font-style: italic; }
   .ask-tip { margin: 12px 0 0; font-size: 14px; color: var(--ink-2); }
 
+  /* "Explain this with Nudi" answer card, at the top of the panel */
+  .explain-slot:empty { display: none; }
+  .explain-card {
+    margin-bottom: 16px; padding: 14px 16px; border-radius: 12px;
+    background: var(--paper); border: 2px solid var(--brand); animation: fade-up 0.2s ease;
+  }
+  .explain-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .explain-top .link-btn { min-height: 44px; }
+  .explain-answer { font-size: calc(19px * var(--scale)); }
+
+  /* What happens if you pay here (under the verdict) */
+  .verdict-pay { margin: 6px 0 0; font-weight: 700; }
+
+  /* "I think this website is fine" */
+  .site-check { margin-top: 10px; }
+  .site-check p { margin: 6px 0 10px; }
+  .site-check .controls-row .btn { min-height: 52px; }
+  .site-check-no { font-weight: 700; color: var(--danger); }
+  .waiting.small { gap: 10px; font-weight: 700; }
+
+  /* "Pay anyway": small on purpose, and a slow hold button */
+  .dialog .pay-anyway { justify-self: center; margin-top: 4px; font-size: 16px; color: var(--ink-2); }
+  .override-phone {
+    margin: 12px 0 0; padding: 12px 14px; border-radius: 10px;
+    background: var(--danger-tint); border: 2px solid var(--danger); font-weight: 700; color: var(--danger);
+  }
+  .hold-btn { position: relative; overflow: hidden; touch-action: none; user-select: none; }
+  .hold-btn:disabled { cursor: not-allowed; border-color: var(--line-strong); color: var(--ink-2); box-shadow: none; }
+  .hold-fill { position: absolute; inset: 0 auto 0 0; width: 0%; background: var(--warn-tint); transition: width 0.05s linear; }
+  .hold-label { position: relative; }
+
+  /* "What Nudi stopped" */
+  .history-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+  .history-item { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); border-left: 6px solid var(--warn-line); background: var(--paper); }
+  .history-item.danger { border-left-color: var(--danger); }
+  .history-item.trusted { border-left-color: var(--safe); }
+  .history-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .risk-badge { padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; }
+  .risk-badge.danger { background: var(--danger-tint); color: var(--danger); }
+  .risk-badge.caution { background: var(--warn-tint); color: var(--warn); }
+  .history-when { font-size: 14px; color: var(--ink-2); }
+  .history-what { margin-top: 6px; font-weight: 700; }
+  .history-site { font-size: calc(16px * var(--scale)); word-break: break-all; }
+  .history-reasons { margin: 6px 0 0; padding-left: 20px; font-size: calc(16px * var(--scale)); }
+  .history-fine { margin: 8px 0 0; font-weight: 700; color: var(--safe); }
+  .history-heading { margin: 18px 0 8px; font-size: calc(18px * var(--scale)); }
+
   @keyframes fade-up { from { opacity: 0; transform: translateY(6px); } }
 
   @media (prefers-reduced-motion: reduce) {

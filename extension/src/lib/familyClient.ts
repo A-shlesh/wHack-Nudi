@@ -2,7 +2,8 @@
 // Keeps the pairing state in Chrome's storage and talks to the backend.
 //
 // Privacy: the ONLY things ever sent are the small events in FamilyEvent
-// (types.ts) and approval requests (site name, amount, trust reasons).
+// (types.ts) and requests to family: "may I pay?" (site name, amount) and
+// "is this website fine?" (site name). The backend writes the reasons itself.
 // Never page text, never what was typed, never browsing history.
 // If sharing is paused, events are not sent at all.
 
@@ -110,7 +111,7 @@ export async function handleFamily(request: BackgroundRequest): Promise<unknown>
       return postForJson<{ approval_id: string }>(
         "/approvals",
         // The backend writes the reasons itself from the site and its age.
-        { site: request.site, amount: request.amount, age_days: request.ageDays },
+        { kind: request.kind, site: request.site, amount: request.amount, age_days: request.ageDays },
         state.elderToken!,
       );
     }
