@@ -4,9 +4,9 @@
 #                               -> 3 DynamoDB tables (Family Link)
 #                               -> Amazon Bedrock (optional AI)
 #
-# Region: ap-south-1 (Mumbai), close to users in India. Claude Haiku on Bedrock
-# is not hosted in Mumbai itself, but it can be called FROM Mumbai through the
-# "global" cross-region inference profile (global.anthropic.claude-haiku-5-5).
+# Region: ap-south-1 (Mumbai), close to users in India. Gemini and Groq are the
+# main AI. Bedrock is optional: if used, pass a model or inference profile that
+# can be called from Mumbai as BedrockModelId.
 #
 # Secrets (Gemini, Groq and ElevenLabs keys) are passed at deploy time as NoEcho
 # parameters. They are never written in this file or in the repo.
@@ -29,8 +29,8 @@ Parameters:
     Description: Backup AI (Groq). Leave empty to skip it.
   BedrockModelId:
     Type: String
-    Default: global.anthropic.claude-haiku-5-5
-    Description: Bedrock inference profile. Leave empty to use the offline mock AI.
+    Default: ""
+    Description: Optional Bedrock model or inference profile ID. Empty = Bedrock not used.
   ElevenLabsApiKey:
     Type: String
     Default: ""
@@ -86,13 +86,13 @@ Resources:
             TableName: !Ref EventsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref ApprovalsTable
-        # Call Anthropic models on Bedrock (through inference profiles) and nothing else.
+        # Call models on Bedrock (through inference profiles) and nothing else.
         - Statement:
             - Effect: Allow
               Action: bedrock:InvokeModel
               Resource:
                 - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
-                - arn:aws:bedrock:*::foundation-model/anthropic.*
+                - arn:aws:bedrock:*::foundation-model/*
       Events:
         AllRoutes:
           Type: HttpApi

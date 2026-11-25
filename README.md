@@ -170,7 +170,7 @@ Edit `backend/.env`:
 | Gemini | `GEMINI_API_KEY`, optional `GEMINI_MODEL` | Key from https://aistudio.google.com/apikey. Default model `gemini-3.5-flash-lite`. Some Google projects have no free tier (error 403 "free tier is not available for this project"); then turn on billing or set `AI_ORDER=groq,gemini,bedrock`. |
 | Groq | `GROQ_API_KEY`, optional `GROQ_MODEL` | Key from https://console.groq.com/keys. Default model `qwen/qwen3.8-27b` (fastest and best in our tests, about 2–3 s per answer); check your limits at console.groq.com/settings/limits. |
 | Order | `AI_ORDER` | Default `gemini,groq,bedrock`. |
-| AWS Bedrock | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`, **or** `AWS_BEARER_TOKEN_BEDROCK`; `AWS_REGION`; `BEDROCK_MODEL_ID` | Uses the Converse API. In the US use `us.anthropic.claude-haiku-5-5`; from Mumbai use `global.anthropic.claude-haiku-5-5`. Turn on model access in the Bedrock console first. |
+| AWS Bedrock | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`, **or** `AWS_BEARER_TOKEN_BEDROCK`; `AWS_REGION`; `BEDROCK_MODEL_ID` | Optional. Uses the Converse API. Set `BEDROCK_MODEL_ID` to a model or inference profile your AWS account can use, and turn on model access in the Bedrock console first. |
 | ElevenLabs | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, optional `ELEVENLABS_MODEL_ID` | Default model `eleven_v4_turbo`. Pick a voice ID from your Voice Library. Also makes the family voice notes. |
 
 If a real service fails at runtime, Nudi quietly falls back to mock mode, so the demo keeps running.
@@ -181,12 +181,12 @@ If a real service fails at runtime, Nudi quietly falls back to mock mode, so the
 
 Runs the backend on **AWS Lambda** behind **API Gateway**, with **DynamoDB** for Family Link and optional **Bedrock**. Defined in `template.yaml` (AWS SAM).
 
-**Region: `ap-south-1` (Mumbai)**, close to users in India. Claude Haiku is not hosted in Mumbai itself, but it can be called from Mumbai through the **global inference profile** `global.anthropic.claude-haiku-5-5` (the template's default). Requests may be served from another AWS region; if that is not acceptable, set `BedrockModelId` to empty to use the mock AI.
+**Region: `ap-south-1` (Mumbai)**, close to users in India. Gemini and Groq (the main AI) work from any region. Bedrock is optional: to use it, pass a model or inference profile that can be called from Mumbai as `BedrockModelId`. Some models are reachable from Mumbai only through a global cross-region profile, so requests may be served from another AWS region.
 
 ### You need
 - An AWS account, the **AWS CLI** (run `aws configure`, region `ap-south-1`) and the **AWS SAM CLI**
 - **Python 3.13** installed (the Lambda runtime), or Docker to build with `--use-container`
-- Optional: Bedrock model access for Anthropic Claude Haiku (Bedrock console → Model access)
+- Optional: Bedrock model access for the model you choose (Bedrock console → Model access)
 
 ### Deploy
 
