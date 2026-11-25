@@ -167,8 +167,8 @@ Edit `backend/.env`:
 
 | Service | Settings | Notes |
 |---|---|---|
-| Gemini | `GEMINI_API_KEY`, optional `GEMINI_MODEL` | Key from https://aistudio.google.com/apikey. Default model `gemini-3.5-flash-lite`; check which models your free tier includes. |
-| Groq | `GROQ_API_KEY`, optional `GROQ_MODEL` | Key from https://console.groq.com/keys. Default model `openai/gpt-oss-20b`; check your limits at console.groq.com/settings/limits. |
+| Gemini | `GEMINI_API_KEY`, optional `GEMINI_MODEL` | Key from https://aistudio.google.com/apikey. Default model `gemini-3.5-flash-lite`. Some Google projects have no free tier (error 403 "free tier is not available for this project"); then turn on billing or set `AI_ORDER=groq,gemini,bedrock`. |
+| Groq | `GROQ_API_KEY`, optional `GROQ_MODEL` | Key from https://console.groq.com/keys. Default model `qwen/qwen3.8-27b` (fastest and best in our tests, about 2–3 s per answer); check your limits at console.groq.com/settings/limits. |
 | Order | `AI_ORDER` | Default `gemini,groq,bedrock`. |
 | AWS Bedrock | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`, **or** `AWS_BEARER_TOKEN_BEDROCK`; `AWS_REGION`; `BEDROCK_MODEL_ID` | Uses the Converse API. In the US use `us.anthropic.claude-haiku-5-5`; from Mumbai use `global.anthropic.claude-haiku-5-5`. Turn on model access in the Bedrock console first. |
 | ElevenLabs | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, optional `ELEVENLABS_MODEL_ID` | Default model `eleven_v4_turbo`. Pick a voice ID from your Voice Library. Also makes the family voice notes. |
