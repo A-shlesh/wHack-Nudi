@@ -29,8 +29,41 @@ export function visibleLabel(element: HTMLElement): string {
 
 /** Hint text for a form field (NEVER the value the user typed). */
 function fieldHint(element: HTMLElement): string {
-  return (element.getAttribute("aria-label") || element.getAttribute("placeholder") || element.getAttribute("name") || "").trim();
+  const field = element as HTMLInputElement;
+  // The <label> tags joined to this field, and any element it names with aria-labelledby.
+  const labels = Array.from(field.labels ?? []).map((label) => label.innerText).join(" ");
+  const labelledBy = (element.getAttribute("aria-labelledby") ?? "")
+    .split(/\s+/)
+    .map((id) => (id ? document.getElementById(id)?.innerText ?? "" : ""))
+    .join(" ");
+  // Many sites show the name as plain text next to the box (no <label>).
+  // innerText never includes what was typed into a box, so this stays private.
+  const nearby = element.parentElement?.innerText ?? "";
+  const byType = FIELD_TYPE_NAMES[element.getAttribute("autocomplete") ?? ""] ?? FIELD_TYPE_NAMES[field.type] ?? "";
+
+  const candidates = [
+    element.getAttribute("aria-label"),
+    labelledBy,
+    labels,
+    element.getAttribute("placeholder"),
+    nearby.length <= 40 ? nearby : "",
+    byType,
+    element.getAttribute("name"),
+  ];
+  return (candidates.map((text) => (text ?? "").replace(/\s+/g, " ").trim()).find((text) => text) ?? "").slice(0, 200);
 }
+
+// Plain names for common kinds of boxes, from their "autocomplete" or "type".
+const FIELD_TYPE_NAMES: Record<string, string> = {
+  tel: "Phone number",
+  "tel-national": "Phone number",
+  email: "Email",
+  username: "Username",
+  name: "Name",
+  "postal-code": "PIN code",
+  "address-line1": "Address",
+  search: "Search",
+};
 
 /** True for things you type into or choose from (not submit buttons). */
 export function isFormField(element: HTMLElement): boolean {

@@ -9,7 +9,7 @@ from ... import config
 
 _URL = "https://api.groq.com/openai/v1/chat/completions"
 _DEFAULT_MODEL = "qwen/qwen3.8-27b"  # fastest and best in our tests; change with GROQ_MODEL
-_TIMEOUT_SECONDS = 15
+_TIMEOUT_SECONDS = 8  # give up quickly so the next AI (or offline rules) can answer
 
 
 def generate(system: str, prompt: str, max_tokens: int, want_json: bool) -> str:

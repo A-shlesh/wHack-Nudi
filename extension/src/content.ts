@@ -14,7 +14,7 @@ import { pageHasLogin, readDemoDomain, readPage } from "./lib/pageReader";
 import { amountToNumber, findAmount, installPageGuard, looksLikePayment, setPageTrust } from "./lib/paymentGuard";
 import { loadSettings } from "./lib/settings";
 import { closeSpotlight, isSpotlightOpen } from "./lib/spotlight";
-import type { PageReadResult, TabRequest } from "./types";
+import type { PageReadResult, PageSnapshot, TabRequest } from "./types";
 
 // This file may be injected twice (for example after the extension reloads); set up once.
 const nudiWindow = window as typeof window & { nudiReady?: boolean };
@@ -33,22 +33,22 @@ if (!nudiWindow.nudiReady) {
 
   chrome.runtime.onMessage.addListener((request: TabRequest, _sender, sendResponse) => {
     switch (request.type) {
-      case "nudi:read": {
+      case "nudi:read":
         loadSettings(); // pick up any change made in the side panel
-        const page = readPage();
-        const demo = readDemoDomain();
-        fixes = findFixes();
-        const result: PageReadResult = {
-          page,
-          fixes: fixes.map((fix) => fix.message),
-          hasPayment: page.elements.some((e) => looksLikePayment(e.label)),
-          hasLogin: pageHasLogin(),
-          demoDomain: demo.domain,
-          demoAgeDays: demo.ageDays,
-        };
-        sendResponse(result);
-        break;
-      }
+        readWhenReady().then((page) => {
+          const demo = readDemoDomain();
+          fixes = findFixes();
+          const result: PageReadResult = {
+            page,
+            fixes: fixes.map((fix) => fix.message),
+            hasPayment: page.elements.some((e) => looksLikePayment(e.label)),
+            hasLogin: pageHasLogin(),
+            demoDomain: demo.domain,
+            demoAgeDays: demo.ageDays,
+          };
+          sendResponse(result);
+        });
+        return true; // the reply comes later (after waiting for the page)
       case "nudi:run":
         runAction(request.action);
         sendResponse(true);
@@ -72,6 +72,23 @@ if (!nudiWindow.nudiReady) {
         sendResponse(true);
         break;
     }
-    return false; // all replies above are sent right away
+    return false; // the other replies above are sent right away
   });
+}
+
+/**
+ * Many modern websites (Flipkart, Amazon…) build their page with JavaScript
+ * AFTER Chrome says "loaded". If the page still looks almost empty, wait a
+ * little (up to about 3 seconds) and read it again.
+ */
+async function readWhenReady(): Promise<PageSnapshot> {
+  const ENOUGH_ELEMENTS = 3;
+  const WAIT_MS = 400;
+  const MAX_TRIES = 8;
+  let page = readPage();
+  for (let tries = 0; page.elements.length < ENOUGH_ELEMENTS && tries < MAX_TRIES; tries++) {
+    await new Promise((resolve) => setTimeout(resolve, WAIT_MS));
+    page = readPage();
+  }
+  return page;
 }

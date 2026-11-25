@@ -81,7 +81,10 @@ def simplify(page: PageSnapshot) -> tuple[str, list[Action], list[PageWarning], 
         summary, actions = mock_ai.simplify(page)
         result = (summary, actions, [], "mock")
 
-    _simplify_cache[key] = (time.time(), result)
+    # Only remember useful answers. A page read too early (still loading) gives
+    # no choices; next time it should be read fresh, not served from memory.
+    if result[1]:
+        _simplify_cache[key] = (time.time(), result)
     return result
 
 

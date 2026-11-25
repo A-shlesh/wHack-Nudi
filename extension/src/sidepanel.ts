@@ -135,6 +135,10 @@ function render(read: PageReadResult, result: SimplifyResponse, trust: TrustResu
   body.append(choices);
   // Say who chose these: the AI, or Nudi's own offline rules.
   body.append(el("p", "ai-note", AI_NAMES[result.mode] ? `Choices picked with help from ${AI_NAMES[result.mode]}.` : "Choices picked by Nudi's offline rules."));
+  // Some websites change without reloading (or were still loading): let the person ask again.
+  const readAgain = el("button", "link-btn", "Read this page again");
+  readAgain.onclick = () => analyze();
+  body.append(readAgain);
 
   // 2. Fixes: shown open, because they are something Nudi can DO for you.
   read.fixes.forEach((message, index) =>
