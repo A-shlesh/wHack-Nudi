@@ -12,7 +12,7 @@ from ... import config
 
 _URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 _DEFAULT_MODEL = "gemini-3.5-flash-lite"  # fast, listed as stable; change with GEMINI_MODEL
-_TIMEOUT_SECONDS = 15
+_TIMEOUT_SECONDS = 8  # give up quickly so the next AI (or offline rules) can answer
 
 
 def generate(system: str, prompt: str, max_tokens: int, want_json: bool) -> str:

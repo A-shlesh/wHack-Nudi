@@ -77,3 +77,40 @@ def test_groq_http_error_raises(monkeypatch):
     capture(monkeypatch, groq, FakeResponse({}, status=500))
     with pytest.raises(httpx.HTTPError):
         groq.generate("s", "p", 50, False)
+
+
+# ---------- Ollama (free AI on this computer) ----------
+
+from app.services.providers import ollama  # noqa: E402
+
+OLLAMA_REPLY = {"message": {"role": "assistant", "content": "Hi from the laptop"}}
+
+
+def test_ollama_request_and_reply(monkeypatch):
+    monkeypatch.setattr(config, "OLLAMA_URL", "http://localhost:11434/")
+    monkeypatch.setattr(config, "OLLAMA_MODEL", "small-model")
+    sent = capture(monkeypatch, ollama, FakeResponse(OLLAMA_REPLY))
+    assert ollama.generate("be kind", "hi", 120, False) == "Hi from the laptop"
+    assert sent["url"] == "http://localhost:11434/api/chat"
+    assert sent["headers"] is None  # no key: nothing secret is sent
+    assert sent["json"]["model"] == "small-model"
+    assert sent["json"]["stream"] is False
+    assert sent["json"]["options"]["num_predict"] == 120
+    assert sent["json"]["messages"][0] == {"role": "system", "content": "be kind"}
+    assert "format" not in sent["json"]
+
+
+def test_ollama_json_mode(monkeypatch):
+    sent = capture(monkeypatch, ollama, FakeResponse(OLLAMA_REPLY))
+    ollama.generate("s", "p", 50, True)
+    assert sent["json"]["format"] == "json"
+
+
+def test_ollama_is_only_used_when_a_model_is_set(monkeypatch):
+    monkeypatch.undo()  # use the real ai_providers(), not the test fixture's "no AI"
+    monkeypatch.setattr(config, "AI_ORDER", ["ollama", "groq"])
+    monkeypatch.setattr(config, "GROQ_API_KEY", "")
+    monkeypatch.setattr(config, "OLLAMA_MODEL", "")
+    assert config.ai_providers() == []
+    monkeypatch.setattr(config, "OLLAMA_MODEL", "small-model")
+    assert config.ai_providers() == ["ollama"]

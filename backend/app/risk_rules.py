@@ -9,7 +9,7 @@ show when one of those phrases appears on the page.
 import re
 from urllib.parse import urlparse
 
-from .schemas import PageSnapshot, PageWarning
+from .schemas import Decision, PageSnapshot, PageWarning
 
 # (phrases to look for, warning level, message shown to the user)
 _TEXT_RULES = [
@@ -91,3 +91,27 @@ def check_page(page: PageSnapshot) -> list[PageWarning]:
         )
 
     return warnings
+
+
+# ---------------------------------------------------------------------------
+# The payment decision: watch < ask_family < block
+# ---------------------------------------------------------------------------
+
+STRICTNESS = {"watch": 0, "ask_family": 1, "block": 2}
+
+
+def rules_decision(warnings: list[PageWarning]) -> Decision:
+    """Nudi's own decision from its rule warnings. A danger sign on the page means
+    "ask family before paying". Blocking is left to the website trust check
+    (a scam WEBSITE) or a clear AI decision."""
+    danger = [w.message for w in warnings if w.level == "danger" and w.source == "rules"]
+    if danger:
+        return Decision(action="ask_family", reasons=danger[:3], source="rules")
+    return Decision()
+
+
+def stricter(rules: Decision, ai: Decision | None) -> Decision:
+    """The AI may only make the decision stricter. On a tie, Nudi's own rules win."""
+    if ai is None or STRICTNESS[ai.action] <= STRICTNESS[rules.action]:
+        return rules
+    return ai

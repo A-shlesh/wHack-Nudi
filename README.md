@@ -12,10 +12,14 @@ Nudi opens in **Chrome's side panel, next to the website**, and:
 - **Ask Nudi**: "How much do I pay?", "When is it due?", "Is this page safe?" (typed, tapped or spoken)
 - **"Explain this with Nudi"**: select confusing words on any page (KYC, convenience fee, auto-debit), right-click, and get a simple explanation
 - **AI second opinion**: the AI can add scam warnings Nudi's rules missed (marked "AI noticed"), but it can never approve a payment or remove a warning
+- **One clear decision per page**: **watch** (normal check), **ask family** (check with family before paying) or **block** (looks like a scam). The verdict says what will happen if you pay, and why. Nudi's rules decide first; the AI can only make the decision stricter.
 - **Talk to Nudi**: "option two", "pay the bill", "read again"
 - **Reads everything aloud**, slowly, with bigger text on request
 - **Always checks before any payment**, whether you tap Nudi's choice or the website's own "Pay" button. On a scam website, payment is **blocked**.
-- **Family Link**: a family member can check payments from their phone. "Ask Sushant first" sends a request with a voice note; Sushant taps **Approve** or **Block**.
+- **Your money, your choice**: on a blocked or risky page there is a small **"I understand the risk. Let me pay anyway."** Nudi reads the reasons again, says "if someone on the phone is telling you to pay, hang up", waits **15 seconds**, and then the button must be **held for 3 seconds**. The family is told afterwards.
+- **"I think this website is fine"**: undo a wrong warning. With Family Link, Sushant checks it on his phone (**Yes, it is fine** / **No, keep warning**). Without Family Link, you can do it yourself on a "Be careful" website; a scam-level website always needs a family member.
+- **What Nudi stopped**: a list of every scam website seen, every payment stopped and every "pay anyway", with the reasons and a risk level (High risk / Some risk). Kept on this computer only.
+- **Family Link**: a family member can check payments and websites from their phone. "Ask Sushant first" sends a request with a voice note; Sushant taps **Approve** or **Block**.
 - **Weekly note for the family**: the dashboard shows a short, warm summary of the week ("Ajji used Nudi for 4 tasks; Nudi stopped 1 risky payment…"), written by the AI from the week's numbers
 - **Never sends passwords, OTPs, card numbers or bank details.** Those fields are skipped inside the browser.
 
@@ -65,11 +69,20 @@ Nudi opens in **Chrome's side panel, next to the website**, and:
 | Family dashboard | `family-dashboard/` | Plain HTML/CSS/JS, served at `/dashboard/` |
 | AWS | `template.yaml`, `backend/app/lambda_handler.py` | SAM template and Lambda entry point |
 
-## AI: Gemini first, Groq as backup, offline rules last
+## AI: free options only, offline rules last
 
-Nudi tries the AI services in order and skips any without a key: **Gemini** (free tier), then **Groq** (free limits), then **AWS Bedrock** (optional). If none answer, Nudi uses its own offline rules. So the demo never breaks.
+Nudi tries the AI services in order and skips any that are not set up. All of them are free to start with:
 
-The AI is used for: page summaries and choices, extra scam warnings, Ask Nudi, "Explain this", and the family weekly note.
+1. **Ollama** on this computer (no key, no internet; **page text never leaves the laptop**)
+2. **Gemini** (free tier)
+3. **Groq** (free limits)
+4. **AWS Bedrock** (optional, paid)
+
+If none answer, Nudi uses its own offline rules. So the demo never breaks.
+
+The AI is used for: page summaries and choices, extra scam warnings, the payment decision, Ask Nudi, "Explain this", and the family weekly note.
+
+**Structured decisions.** The AI's page reply must include one decision, `watch`, `ask_family` or `block`, with short reasons. It is checked against a Pydantic model; a reply that does not fit is thrown away, never guessed at. A stricter decision with no reasons is also thrown away, because the person must always see *why*.
 
 **Human-in-the-loop, rule-based safety.** The AI only *suggests*. The payment check, scam blocking, the website trust check and the privacy filter are fixed rules the AI cannot change: it cannot approve a payment, mark a Pay button as "not a payment", or remove a rule's warning. A person always makes the final call.
 
@@ -130,6 +143,9 @@ npm run build
 **Scam lookalike**: http://localhost:8787/demo/bescom-scam.html (pretends to be `bescom-bill-pay-offer.co`, 9 days old)
 1. Nudi says **This website looks like a scam**, trust score 0/100, with the reasons.
 2. Tap Pay (in Nudi or on the page). **Nudi stopped this payment**, and there is no "Yes" button.
+3. Tap the small **I understand the risk. Let me pay anyway.** Nudi reads the reasons again and counts down 15 seconds. Then **hold** the button for 3 seconds. A quick tap does nothing.
+4. Open **What Nudi stopped** in the side panel: the scam website and the payment are listed with the reasons and **High risk**.
+5. Under the verdict, tap **I think this website is fine**. Without Family Link, Nudi says only a family member can mark a scam website as fine.
 
 **Family Link** (the full story):
 1. In the side panel, scroll to **Family** and tap **Connect family**. A 6-digit code appears.
@@ -138,6 +154,7 @@ npm run build
 4. On the scam page tap Pay, then **Ask Sushant first**. Nudi shows and says **"Waiting for Sushant…"**.
 5. The dashboard shows the request: amount, website, Nudi's reasons, **Play voice note**, **Approve** / **Block**.
 6. Tap **Block**. Nudi says **"Sushant said no… No money was spent."** The dashboard's weekly strip shows the payment stopped and the money saved.
+7. Under the verdict, tap **I think this website is fine**, then **Ask Sushant**. The dashboard shows **Ajji thinks this website is fine** with **Yes, it is fine** / **No, keep warning**. Tap **Yes**: within a few seconds Nudi shows the website as safe, with "Sushant checked this website and said it is fine." Undo it any time under **What Nudi stopped → Websites marked as fine → Warn me again**.
 
 **Dashboard on a phone (same Wi-Fi)**: start the backend so other devices can reach it, then open `http://<your-laptop-IP>:8787/dashboard/` on the phone. Find the IP with `ipconfig` (IPv4 Address). Windows may ask to allow Python through the firewall: allow it for **Private** networks.
 
@@ -167,9 +184,10 @@ Edit `backend/.env`:
 
 | Service | Settings | Notes |
 |---|---|---|
-| Gemini | `GEMINI_API_KEY`, optional `GEMINI_MODEL` | Key from https://aistudio.google.com/apikey. Default model `gemini-3.5-flash-lite`. Some Google projects have no free tier (error 403 "free tier is not available for this project"); then turn on billing or set `AI_ORDER=groq,gemini,bedrock`. |
+| Ollama | `OLLAMA_MODEL`, optional `OLLAMA_URL` | Free, runs on this computer. Install from https://ollama.com, run `ollama pull <model>` (a small 3–8B model is enough), and put the model name in `OLLAMA_MODEL`. Empty = not used. Slower than the cloud AIs on a laptop without a GPU. |
+| Gemini | `GEMINI_API_KEY`, optional `GEMINI_MODEL` | Key from https://aistudio.google.com/apikey. Default model `gemini-3.5-flash-lite`. Some Google projects have no free tier (error 403 "free tier is not available for this project"); then turn on billing or set `AI_ORDER=ollama,groq,gemini,bedrock`. |
 | Groq | `GROQ_API_KEY`, optional `GROQ_MODEL` | Key from https://console.groq.com/keys. Default model `qwen/qwen3.8-27b` (fastest and best in our tests, about 2–3 s per answer); check your limits at console.groq.com/settings/limits. |
-| Order | `AI_ORDER` | Default `gemini,groq,bedrock`. |
+| Order | `AI_ORDER` | Default `ollama,gemini,groq,bedrock`. |
 | AWS Bedrock | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`, **or** `AWS_BEARER_TOKEN_BEDROCK`; `AWS_REGION`; `BEDROCK_MODEL_ID` | Optional. Uses the Converse API. Set `BEDROCK_MODEL_ID` to a model or inference profile your AWS account can use, and turn on model access in the Bedrock console first. |
 | ElevenLabs | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, optional `ELEVENLABS_MODEL_ID` | Default model `eleven_v4_turbo`. Pick a voice ID from your Voice Library. Also makes the family voice notes. |
 
@@ -233,15 +251,20 @@ This deletes the Lambda function, the API, the logs and the three tables (with t
 - Long numbers, card-like numbers and IFSC codes in page text become `[hidden]`, in the browser **and** again on the server.
 - The address sent to the backend has no query string or `#` part (they can hold login tokens).
 - **Domain check:** only the website's domain name is sent to `rdap.org` to look up its age.
-- **AI:** only text that already went through the privacy filter is sent. On Gemini's **free tier, Google may use what is sent to improve its products**; for real users, use a paid tier or Bedrock.
+- **AI:** only text that already went through the privacy filter is sent. With **Ollama**, nothing leaves the computer at all. On Gemini's **free tier, Google may use what is sent to improve its products**; for real users, use Ollama, a paid tier or Bedrock.
+- **What Nudi stopped** and **websites marked as fine** are stored only in this Chrome profile. They are never sent anywhere.
 - **"Explain this"** sends only the words you selected (up to 500 characters), with private numbers hidden.
-- **Family Link** shares only: a task was started, a warning level was shown, an extra was removed (and the amount saved), a payment help request (website domain, amount, Nudi's reasons), and whether a payment was made or stopped. **Never** the pages visited, page text, or anything typed. The elder must tap **Allow** before anything is shared, sees **Sharing with family: ON**, and can pause sharing at any time.
+- **Family Link** shares only: a task was started, a warning level was shown, an extra was removed (and the amount saved), a payment help request (website domain, amount, Nudi's reasons), a "this website is fine" request (website domain only), and whether a payment was made, stopped, or made after a warning ("pay anyway"). **Never** the pages visited, page text, or anything typed. The elder must tap **Allow** before anything is shared, sees **Sharing with family: ON**, and can pause sharing at any time.
 - Family Link uses separate secret tokens for the elder and the family member. Pairing codes work once, expire after 10 minutes, and wrong guesses are limited.
 - **Talk** uses Chrome's built-in speech recognition, which sends the audio to Google to turn it into text. It only listens while the Talk button is red.
+
+## Who pays for Nudi
+
+Free for the elder and their family. The plan is to charge the organisations that lose money when a scam succeeds: **banks, payment apps and telecom operators**. Every stopped scam is a fraud claim, a chargeback or a support call they do not have to handle. They could offer Nudi to customers over 60, or license the scam checks and decisions for their own apps.
 
 ## Limits (prototype)
 
 - English only
-- Scam detection is phrase-based plus the domain check (and the AI when Bedrock is on)
+- Scam detection is phrase-based plus the domain check (and the AI when one is set up)
 - The brand list in `backend/app/trust/brands.json` is short and should be checked against each brand's real websites
 - Demo pages pretend to be other websites with `<meta name="nudi-demo-domain">`; this only works on localhost or the Nudi backend's own address

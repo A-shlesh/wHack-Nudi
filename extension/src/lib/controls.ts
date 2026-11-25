@@ -85,12 +85,12 @@ export function buildControls(options: ControlsOptions): HTMLElement {
   // --- Voice on/off switch ---
   const voiceToggle = el("button", "toggle");
   voiceToggle.append(el("span", "track"), el("span", "", "Voice"));
-  voiceToggle.setAttribute("aria-pressed", String(getSettings().voiceOn));
+  voiceToggle.setAttribute("aria-pressed", String(getSettings().readAloud === true));
   voiceToggle.title = "Read things aloud automatically";
   voiceToggle.onclick = async () => {
-    const settings = await saveSettings({ voiceOn: !getSettings().voiceOn });
-    voiceToggle.setAttribute("aria-pressed", String(settings.voiceOn));
-    if (!settings.voiceOn) stopSpeaking();
+    const settings = await saveSettings({ readAloud: getSettings().readAloud !== true });
+    voiceToggle.setAttribute("aria-pressed", String(settings.readAloud));
+    if (!settings.readAloud) stopSpeaking();
   };
 
   const settingsRow = el("div", "settings-row");

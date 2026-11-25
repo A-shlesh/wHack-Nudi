@@ -4,12 +4,19 @@
 //   2. A page-wide click watcher catches the user clicking a "Pay"/"Buy"
 //      button on the real page, and asks first there too.
 //
-// The question ("Check before you pay") has three answers:
-//   No, do not pay  |  Yes, pay  |  Ask Sushant (Family Link)
-// If the website looks like a SCAM (trust level "danger"), "Yes" is removed:
-// the only way forward is a family member approving it.
+// What the person sees depends on how risky the page is (Nudi's decision):
+//   watch       "Check before you pay":  No, do not pay | Yes, pay | Ask Sushant
+//   ask_family  "Ask Sushant first":     No, do not pay | Ask Sushant | (small) pay anyway
+//   block       "Nudi stopped this":     OK, do not pay | Ask Sushant | (small) pay anyway
+// A scam WEBSITE (trust level "danger") is always "block".
+//
+// "Pay anyway" is the person's own choice, but it is SLOW on purpose: Nudi
+// reads the reasons, waits 15 seconds, then the button must be HELD for 3
+// seconds. Phone scammers say "just click through the warning"; the pause
+// gives the person time to think, and the family is told afterwards.
 
-import type { ApprovalStatus, FamilyState, TrustResult } from "../types";
+import type { ApprovalStatus, Decision, FamilyState, TrustResult } from "../types";
+import { addHistory, type HistoryItem } from "./history";
 import { askBackground } from "./messages";
 import { visibleLabel } from "./pageReader";
 import { createOverlayHost, el, iconSpan } from "./ui";
@@ -37,11 +44,35 @@ export function amountToNumber(amount: string | null): number | null {
   return digits ? Number(digits) : null;
 }
 
-// The trust result for this page, sent by the side panel (null = not checked).
+// The trust result and Nudi's decision for this page, sent by the side panel (null = not checked).
 let pageTrust: TrustResult | null = null;
-export function setPageTrust(trust: TrustResult | null): void {
+let pageDecision: Decision | null = null;
+export function setPageTrust(trust: TrustResult | null, decision: Decision | null = null): void {
   pageTrust = trust;
+  pageDecision = decision;
 }
+
+type Mode = "watch" | "ask_family" | "block";
+
+/** The strictest of: the website trust check and the page decision. */
+function paymentMode(): Mode {
+  if (pageTrust?.level === "danger" || pageDecision?.action === "block") return "block";
+  if (pageDecision?.action === "ask_family") return "ask_family";
+  return "watch";
+}
+
+/** Every reason Nudi has, in plain words: website reasons first, then the page decision. */
+function riskReasons(): string[] {
+  const site =
+    pageTrust?.level === "safe"
+      ? []
+      : (pageTrust?.reasons ?? []).filter((r) => r.code !== "LOCAL").map((r) => r.message_simple);
+  const page = pageDecision?.action === "watch" ? [] : (pageDecision?.reasons ?? []);
+  return [...new Set([...site, ...page])];
+}
+
+const WAIT_SECONDS = 15; // "pay anyway": time to think before the button works
+const HOLD_MS = 3000; // ...and then it must be held down this long
 
 // Three quick questions to make the user pause and think before paying.
 const CHECKLIST = [
@@ -76,14 +107,25 @@ export async function confirmPayment(actionLabel: string): Promise<boolean> {
 
   return new Promise<boolean>((resolve) => {
     let polling: number | undefined;
+    const timers: number[] = []; // countdown and hold timers, stopped when the dialog closes
+    const mode = paymentMode();
+    const reasons = riskReasons();
+    const risk: HistoryItem["risk"] = mode === "block" ? "danger" : "caution";
+    let familySaidNo = false;
 
-    const finish = (paid: boolean) => {
+    /** how: "normal" (Yes or No), or "anyway" (paid after the slow override). */
+    const finish = (paid: boolean, how: "normal" | "anyway" = "normal") => {
       dialogOpen = false;
       window.clearInterval(polling);
+      timers.forEach((t) => window.clearInterval(t));
       document.removeEventListener("keydown", onKey, true);
       host.remove();
-      const event = paid ? "payment_confirmed" : "payment_blocked";
-      askBackground({ type: "family:event", event: { kind: event, amount: amountToNumber(amount) } }).catch(() => {});
+      const kind = how === "anyway" ? "payment_overridden" : paid ? "payment_confirmed" : "payment_blocked";
+      askBackground({ type: "family:event", event: { kind, amount: amountToNumber(amount) } }).catch(() => {});
+      // "What Nudi stopped" (kept on this computer): only risky pages, not every normal "No".
+      const what: HistoryItem["what"] | null =
+        how === "anyway" ? "paid_anyway" : familySaidNo ? "family_no" : !paid && mode !== "watch" ? "stopped" : null;
+      if (what) addHistory({ site, what, risk, amount, reasons }).catch(() => {});
       resolve(paid);
     };
 
@@ -149,28 +191,148 @@ export async function confirmPayment(actionLabel: string): Promise<boolean> {
       );
     }
 
-    /** Scam site: payment is blocked. Only family can unlock it. */
+    const reasonList = () => {
+      const list = el("ul", "checklist danger-list");
+      for (const reason of reasons) {
+        const li = el("li", "");
+        li.append(iconSpan("alert", 20), el("span", "", reason));
+        list.append(li);
+      }
+      return list;
+    };
+
+    /** The small "pay anyway" link: the person's own choice, but it leads to the slow screen. */
+    const payAnywayLink = () => {
+      const link = el("button", "link-btn pay-anyway", "I understand the risk. Let me pay anyway.");
+      link.onclick = (event) => {
+        if (event.isTrusted) showOverride();
+      };
+      return link;
+    };
+
+    /** Scam site (or a clear scam page): payment is blocked. Family can unlock it, or the slow "pay anyway". */
     function showBlocked(): void {
       const title = el("h2", "", "Nudi stopped this payment");
-      const reasons = el("ul", "checklist danger-list");
-      for (const reason of pageTrust?.reasons ?? []) {
-        const li = el("li", "");
-        li.append(iconSpan("alert", 20), el("span", "", reason.message_simple));
-        reasons.append(li);
-      }
       const close = el("button", "btn primary", "OK, do not pay");
       close.onclick = () => finish(false);
       const buttons = el("div", "dialog-buttons");
       buttons.append(close);
+      const what = pageTrust?.level === "danger" ? "This website looks like a scam" : "This page looks like a scam";
       const lead = familyReady
-        ? `This website looks like a scam. You can only pay if ${familyName} checks it and says yes.`
-        : "This website looks like a scam, so paying here is blocked.";
+        ? `${what}. The safest way is to ask ${familyName} to check it first.`
+        : `${what}, so I stopped the payment.`;
       if (familyReady) buttons.append(askFamilyButton(false));
+      buttons.append(payAnywayLink());
 
       dialog.className = "dialog blocked";
-      dialog.replaceChildren(title, el("p", "", lead), amountBox(), reasons, buttons, privacyLine());
+      dialog.replaceChildren(title, el("p", "", lead), amountBox(), reasonList(), buttons, privacyLine());
       close.focus();
-      speak(`I have stopped this payment. This website looks like a scam. ${familyReady ? `You can ask ${familyName} to check it.` : ""}`);
+      speak(`I have stopped this payment. ${what}. ${familyReady ? `You can ask ${familyName} to check it.` : ""}`);
+    }
+
+    /** Risky page: Nudi suggests asking family first. Paying alone is still possible, slowly. */
+    function showAskFirst(): void {
+      const title = el("h2", "", familyReady ? `Ask ${familyName} first` : "Please stop and check");
+      const no = el("button", "btn primary", "No, do not pay");
+      no.onclick = () => finish(false);
+      const buttons = el("div", "dialog-buttons");
+      buttons.append(no);
+      if (familyReady) buttons.append(askFamilyButton(false));
+      buttons.append(payAnywayLink());
+      const lead = familyReady
+        ? `Something on this page worries me. Please let ${familyName} check before you pay.`
+        : "Something on this page worries me. Please talk to someone you trust before you pay.";
+
+      dialog.className = "dialog";
+      dialog.replaceChildren(title, el("p", "", lead), amountBox(), reasonList(), buttons, privacyLine());
+      no.focus();
+      speak(`${lead} ${reasons[0] ?? ""}`);
+    }
+
+    /**
+     * "Pay anyway": the person may pay, but only after hearing the reasons again,
+     * waiting 15 seconds, and then holding the button down for 3 seconds.
+     */
+    function showOverride(): void {
+      const title = el("h2", "", "Are you sure?");
+      const lead = el("p", "", "Nudi thinks this payment is not safe because:");
+      const phone = el(
+        "p",
+        "override-phone",
+        "If someone on the phone is telling you to pay, hang up now. Banks and companies never rush you.",
+      );
+      const no = el("button", "btn primary", "No, do not pay");
+      no.onclick = () => finish(false);
+      const hold = holdButton(() => finish(true, "anyway"));
+      const buttons = el("div", "dialog-buttons");
+      buttons.append(no, hold.button);
+
+      dialog.className = "dialog blocked";
+      dialog.replaceChildren(title, lead, reasonList(), phone, amountBox(), buttons);
+      no.focus();
+      speak(`Are you sure? ${reasons.join(" ")} If someone on the phone is telling you to pay, hang up now.`);
+
+      // Count down, then let the person hold the button.
+      let left = WAIT_SECONDS;
+      hold.wait(left);
+      const countdown = window.setInterval(() => {
+        left -= 1;
+        hold.wait(left);
+        if (left <= 0) window.clearInterval(countdown);
+      }, 1000);
+      timers.push(countdown);
+    }
+
+    /** A button that only works after the countdown, and only while held down for HOLD_MS. */
+    function holdButton(onDone: () => void): { button: HTMLButtonElement; wait: (seconds: number) => void } {
+      const button = el("button", "btn secondary hold-btn") as HTMLButtonElement;
+      const fill = el("span", "hold-fill");
+      const label = el("span", "hold-label");
+      button.append(fill, label);
+      let ready = false;
+      let ticker: number | undefined;
+      const readyText = amount ? `Hold to pay ${amount}` : "Hold to pay anyway";
+
+      const reset = () => {
+        window.clearInterval(ticker);
+        ticker = undefined;
+        fill.style.width = "0%";
+        if (ready) label.textContent = readyText;
+      };
+      // isTrusted: only a real press by the person counts, never the website's own code.
+      const start = (event: Event) => {
+        if (!ready || !event.isTrusted || ticker !== undefined) return;
+        const started = Date.now();
+        label.textContent = "Keep holding…";
+        ticker = window.setInterval(() => {
+          const done = Math.min(1, (Date.now() - started) / HOLD_MS);
+          fill.style.width = `${done * 100}%`;
+          if (done >= 1) {
+            reset();
+            onDone();
+          }
+        }, 50);
+        timers.push(ticker);
+      };
+      button.addEventListener("pointerdown", start);
+      button.addEventListener("pointerup", reset);
+      button.addEventListener("pointerleave", reset);
+      button.addEventListener("pointercancel", reset);
+      button.addEventListener("keydown", (event) => {
+        if ((event.key === " " || event.key === "Enter") && !event.repeat) {
+          event.preventDefault();
+          start(event);
+        }
+      });
+      button.addEventListener("keyup", reset);
+      button.addEventListener("click", (event) => event.preventDefault()); // a quick tap does nothing
+
+      const wait = (seconds: number) => {
+        ready = seconds <= 0;
+        button.disabled = !ready;
+        label.textContent = ready ? readyText : `Please wait ${seconds} seconds and think`;
+      };
+      return { button, wait };
     }
 
     /** Waiting for the family member to answer on their phone. */
@@ -191,9 +353,9 @@ export async function confirmPayment(actionLabel: string): Promise<boolean> {
       try {
         const { approval_id } = await askBackground<{ approval_id: string }>({
           type: "family:ask-approval",
+          kind: "payment",
           site,
           amount,
-          reasons: (pageTrust?.reasons ?? []).map((r) => r.message_simple),
           ageDays: pageTrust?.domain_age_days ?? null,
         });
         polling = window.setInterval(async () => {
@@ -215,6 +377,7 @@ export async function confirmPayment(actionLabel: string): Promise<boolean> {
     }
 
     function showFamilySaidNo(): void {
+      familySaidNo = true;
       const ok = el("button", "btn primary", "OK");
       ok.onclick = () => finish(false);
       dialog.className = "dialog blocked";
@@ -227,7 +390,8 @@ export async function confirmPayment(actionLabel: string): Promise<boolean> {
       speak(`${familyName} said no, so I stopped the payment. No money was spent. You did the right thing by asking.`);
     }
 
-    if (pageTrust?.level === "danger") showBlocked();
+    if (mode === "block") showBlocked();
+    else if (mode === "ask_family") showAskFirst();
     else showCheck();
   });
 }

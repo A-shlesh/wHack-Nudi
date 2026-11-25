@@ -1,5 +1,7 @@
 # Tests for privacy.redact: private numbers are hidden, normal text is kept.
 
+import pytest
+
 from app.privacy import redact, safe_url
 
 
@@ -64,3 +66,59 @@ def test_pan_is_hidden():
 def test_safe_url_drops_query_and_fragment():
     url = "https://bank.example.com/reset?token=abc123#access_token=xyz"
     assert safe_url(url) == "https://bank.example.com/reset"
+
+
+@pytest.mark.parametrize(
+    "number",
+    [
+        "9482300400",
+        "+91 94823 00400",
+        "94823-00400",
+        "08277799990",
+        "080 22261702",
+        "080-22535907",
+        "0821 2345678",
+        "1800 425 1234",
+        "18004251234",
+    ],
+)
+def test_phone_numbers_are_kept(number):
+    text = f"Call {number} for help"
+    assert redact(text) == text
+
+
+def test_ssp_page_phone_numbers_are_kept():
+    text = (
+        "SSP Helpline 1902. Social Welfare 9482300400 swdcontrolroom@gmail.com "
+        "Landline No: 080 22261702 / 080 22261703"
+    )
+    assert redact(text) == text
+
+
+def test_phone_next_to_otp_text_still_works():
+    result = redact("Call 9482300400. 481516 is your OTP")
+    assert "9482300400" in result
+    assert "481516" not in result
+
+
+@pytest.mark.parametrize(
+    "text, secret",
+    [
+        ("6521 1234 5678 9012", "5678"),
+        ("4111111111111111", "4111"),
+        ("Aadhaar 1234 5678 9012", "5678"),
+        ("987654321098", "987654321098"),
+        ("IFSC SBIN0001234", "SBIN0001234"),
+        ("PAN ABCDE1234F", "ABCDE1234F"),
+        ("OTP is 481516", "481516"),
+        ("481516 is your OTP", "481516"),
+        ("password: x", "x"),
+        ("Account no 9876543210", "9876543210"),
+        ("card 9876543210", "9876543210"),
+        ("A/c 9876543210", "9876543210"),
+    ],
+)
+def test_private_numbers_are_still_hidden(text, secret):
+    result = redact(text)
+    assert secret not in result.replace("[hidden]", "")
+    assert "[hidden]" in result

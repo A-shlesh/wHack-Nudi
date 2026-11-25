@@ -92,3 +92,31 @@ def test_voice_note_text_mentions_age_only_when_young():
     assert "20 days ago" in young and "Rs 500" in young
     assert "days ago" not in family.voice_note_text("Ajji", "₹500", "shop.example.com", 4000)
     assert "days ago" not in family.voice_note_text("Ajji", None, "shop.example.com", None)
+
+
+# ---------- "I think this website is fine" requests ----------
+
+
+def test_site_request_has_no_amount_and_its_own_wording(client):
+    elder, helper, fid = pair(client)
+    approval_id = ask(client, elder, kind="site", amount="₹999", site="bescom-bill.in").json()["approval_id"]
+    body = client.get(f"/family/{fid}/feed", headers=helper).json()
+    pending = body["pending"][0]
+    assert pending["kind"] == "site"
+    assert pending["amount"] is None  # a site check is not about money
+    assert "real website" in pending["voice_text"]
+    assert "asked you to check whether bescom-bill.in is a real website" in body["events"][0]["text"]
+
+    client.post(f"/approvals/{approval_id}/decision", json={"decision": "approved"}, headers=helper)
+    assert client.get(f"/approvals/{approval_id}", headers=elder).json() == {"status": "approved"}
+
+
+def test_payment_requests_say_kind_payment(client):
+    elder, helper, fid = pair(client)
+    ask(client, elder)
+    assert client.get(f"/family/{fid}/feed", headers=helper).json()["pending"][0]["kind"] == "payment"
+
+
+def test_unknown_request_kind_is_rejected(client):
+    elder, _, _ = pair(client)
+    assert ask(client, elder, kind="anything").status_code == 422

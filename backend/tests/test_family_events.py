@@ -93,3 +93,12 @@ def test_weekly_summary_counts(client):
     client.post("/events", json={"kind": "addon_removed", "amount_saved": 300}, headers=elder)
     client.post("/events", json={"kind": "payment_blocked", "amount": 700}, headers=elder)
     assert feed(client, helper, fid)["summary"] == {"tasks_done": 2, "scams_blocked": 1, "money_saved": 1000}
+
+
+def test_paid_anyway_is_shown_to_family_but_not_counted_as_stopped(client):
+    elder, helper, fid = pair(client)
+    client.post("/events", json={"kind": "payment_overridden", "amount": 1275}, headers=elder)
+    body = feed(client, helper, fid)
+    assert "chose to make a payment of ₹1,275 after Nudi warned them" in body["events"][0]["text"]
+    assert body["summary"]["scams_blocked"] == 0
+    assert body["summary"]["money_saved"] == 0

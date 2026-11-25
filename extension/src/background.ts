@@ -64,7 +64,18 @@ async function handle(request: BackgroundRequest): Promise<unknown> {
   }
 }
 
-chrome.runtime.onMessage.addListener((request: BackgroundRequest, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((request: BackgroundRequest, sender, sendResponse) => {
+  // "One voice at a time": the side panel started talking, so tell the page to be quiet.
+  // (When the page starts talking, the side panel hears it directly.)
+  if (request.type === "voice:claim") {
+    if (!sender.tab) {
+      chrome.tabs.query({ active: true }).then((tabs) =>
+        tabs.forEach((tab) => tab.id !== undefined && chrome.tabs.sendMessage(tab.id, request).catch(() => {})),
+      );
+    }
+    return false;
+  }
+
   handle(request)
     .then((data) => sendResponse({ ok: true, data } satisfies BackgroundReply<unknown>))
     .catch((error: Error) => sendResponse({ ok: false, error: error.message } satisfies BackgroundReply<unknown>));

@@ -3,7 +3,7 @@ The Nudi web server (FastAPI).
 
 Endpoints:
   GET  /health    -> is the server up, and which services are real or mock
-  POST /simplify  -> page summary in, Action View (summary, big buttons, warnings) out
+  POST /simplify  -> page summary in, Action View (summary, big buttons, warnings, decision) out
   POST /ask       -> a question about the page in, a short plain answer out
   POST /explain   -> selected text in, a simple explanation out
   POST /trust     -> a website address in, a trust score with simple reasons out
@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config, family
 from .privacy import redact, safe_url
-from .risk_rules import check_page, is_payment_label
+from .risk_rules import check_page, is_payment_label, rules_decision, stricter
 from .domain_trust import check_trust
 from .schemas import (
     AskRequest,
@@ -85,7 +85,7 @@ def _clean(page: PageSnapshot) -> None:
 @app.post("/simplify", response_model=SimplifyResponse)
 def simplify(page: PageSnapshot):
     _clean(page)
-    summary, actions, ai_warnings, mode = ai_features.simplify(page)
+    summary, actions, ai_warnings, ai_decision, mode = ai_features.simplify(page)
 
     # Never trust the AI alone about money. The AI may rename "Pay ₹5000" to "Finish",
     # so we check the ORIGINAL label of the page element too, not just the new label.
@@ -99,7 +99,9 @@ def simplify(page: PageSnapshot):
     rule_warnings = check_page(page)
     known = {w.message for w in rule_warnings}
     warnings = rule_warnings + [w for w in ai_warnings if w.message not in known]
-    return SimplifyResponse(summary=summary, actions=actions, warnings=warnings, mode=mode)
+    # Same for the payment decision: the rules decide, the AI can only make it stricter.
+    decision = stricter(rules_decision(rule_warnings), ai_decision)
+    return SimplifyResponse(summary=summary, actions=actions, warnings=warnings, decision=decision, mode=mode)
 
 
 @app.post("/ask", response_model=AskResponse)

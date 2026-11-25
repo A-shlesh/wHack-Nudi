@@ -17,6 +17,8 @@ Privacy (what may be shared, and nothing else):
   - events: only the kinds in EventIn below, with a level or an amount.
     Never page text, never what was typed, never browsing history.
   - approvals: the website name (domain only), the amount, and the trust reasons.
+    Two kinds: "payment" (may I pay?) and "site" (I think this website is fine;
+    please check). Approving a "site" request lets the elder's Nudi trust it.
   - The elder can pause sharing at any time; then events are not stored.
 """
 
@@ -240,7 +242,10 @@ def set_sharing(body: SharingRequest, family: dict = Depends(elder_family)):
 
 
 class EventIn(BaseModel):
-    kind: Literal["task_started", "warning_shown", "addon_removed", "payment_confirmed", "payment_blocked"]
+    kind: Literal[
+        "task_started", "warning_shown", "addon_removed", "payment_confirmed", "payment_blocked",
+        "payment_overridden",  # the elder chose "pay anyway" after Nudi's warning and wait
+    ]
     level: Literal["caution", "danger"] | None = None
     amount: float | None = Field(default=None, ge=0, le=10_000_000)
     amount_saved: float | None = Field(default=None, ge=0, le=10_000_000)
@@ -264,6 +269,7 @@ def log_event(body: EventIn, family: dict = Depends(elder_family)):
 
 
 class ApprovalIn(BaseModel):
+    kind: Literal["payment", "site"] = "payment"
     site: str = Field(max_length=253)
     # Only a money amount such as "₹1,275" or "Rs 500". No other text can get through.
     amount: str | None = Field(default=None, pattern=r"^(₹|Rs\.?|INR)\s?\d[\d,]*(\.\d{1,2})?$")
@@ -290,7 +296,12 @@ def _server_reasons(site: str, age_days: int | None) -> list[str]:
     return [r.message_simple for r in age_reasons + brand_reasons if r.code != "OFFICIAL_BRAND"]
 
 
-def voice_note_text(elder: str, amount: str | None, site: str, age_days: int | None) -> str:
+def voice_note_text(elder: str, amount: str | None, site: str, age_days: int | None, kind: str = "payment") -> str:
+    if kind == "site":
+        text = f"{elder} thinks {site} is a real website and asks you to check it"
+        if age_days is not None and age_days < 365:
+            text += f". It was made {age_days} days ago"
+        return text + ". Please look in Nudi."
     money = (amount or "some money").replace("₹", "Rs ")
     text = f"{elder} is trying to pay {money} to {site}"
     if age_days is not None and age_days < 365:
@@ -304,20 +315,25 @@ def create_approval(body: ApprovalIn, family: dict = Depends(elder_family)):
         raise HTTPException(409, "Family Link is not on.")
     site = _clean_site(body.site)
     reasons = _server_reasons(site, body.age_days)
-    text = voice_note_text(family["elder_name"], body.amount, site, body.age_days)
+    amount = body.amount if body.kind == "payment" else None
+    text = voice_note_text(family["elder_name"], amount, site, body.age_days, body.kind)
     audio = voice.speak(text)  # None in mock mode: the dashboard reads the text aloud itself
     approval = {
         "id": _new_id(),
         "at": _now(),
         "status": "pending",
+        "kind": body.kind,
         "site": site,
-        "amount": body.amount,
+        "amount": amount,
         "reasons": reasons,
         "voice_text": text,
         "voice_b64": audio.hex() if audio else None,  # hex keeps it a plain string
     }
     storage().put_approval(family["family_id"], approval)
-    _store_event(family, {"kind": "approval_requested", "amount_text": body.amount, "site": site})
+    if body.kind == "site":
+        _store_event(family, {"kind": "site_check_requested", "site": site})
+    else:
+        _store_event(family, {"kind": "approval_requested", "amount_text": amount, "site": site})
     return {"approval_id": approval["id"]}
 
 
@@ -377,6 +393,12 @@ def describe(event: dict, elder: str, helper: str) -> tuple[str, str]:
     if kind == "payment_blocked":
         amount = _rupees(event.get("amount"))
         return "blocked", f"A payment of {amount} was stopped" if amount else "A payment was stopped"
+    if kind == "payment_overridden":
+        amount = _rupees(event.get("amount"))
+        money = f"a payment of {amount}" if amount else "a payment"
+        return "paid", f"{elder} chose to make {money} after Nudi warned them and asked them to wait"
+    if kind == "site_check_requested":
+        return "ask", f"{elder} asked you to check whether {event.get('site')} is a real website"
     if kind == "approval_requested":
         return "ask", f"{elder} asked you to check a payment of {event.get('amount_text') or 'money'} to {event.get('site')}"
     if kind == "paired":
@@ -412,7 +434,8 @@ def feed(family_id: str, family: dict = Depends(helper_family)):
         "family_name": family["family_name"],
         "sharing_on": family["sharing_on"],
         "pending": [
-            {k: a[k] for k in ("id", "at", "site", "amount", "reasons", "voice_text")} | {"has_voice": bool(a.get("voice_b64"))}
+            {k: a[k] for k in ("id", "at", "site", "amount", "reasons", "voice_text")}
+            | {"kind": a.get("kind", "payment"), "has_voice": bool(a.get("voice_b64"))}
             for a in approvals
             if a["status"] == "pending"
         ],

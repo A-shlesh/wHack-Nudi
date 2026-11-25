@@ -53,11 +53,47 @@ const PRIVATE_TEXT_PATTERNS: RegExp[] = [
   /\bpassword\s*[:=]\s*\S+/gi, // "password: secret"
 ];
 
-/** Replace private-looking data with [hidden]. */
+// Phone and helpline numbers are NOT private: they are public contact details
+// on a page, and Nudi needs them to answer "what is the helpline number?".
+// So we protect them from the patterns above (which would hide any 9+ digit
+// run) and put them back afterwards. Keep in sync with backend/app/privacy.py.
+const PHONE_NUMBER =
+  // Not part of a longer number: no digit (or digit + space/dash) before it,
+  // and no space/dash + digit after it.
+  /(?<!\d)(?<!\d[ -])(?:(?:(?:\+91[ -]?|91 |0)?[6-9]\d{4}[ -]?\d{5})|(?:0\d{2,4}[ -]\d{6,8})|(?:1800[ -]?\d{3}[ -]?\d{4}))(?![ -]?\d)/g;
+
+// If one of these words sits just before a number, it is an account, card or
+// similar private number, not a phone number.
+const PRIVATE_NUMBER_CONTEXT =
+  /(?<![A-Za-z0-9])(?:account|a\/c|acct|card|aadhaar|aadhar|otp|pin|cvv|ifsc|upi|pan|password)(?![A-Za-z0-9])/i;
+const CONTEXT_CHARS = 25;
+
+/** a, b, ... z, ba, bb ... (letters only, so no pattern above can match it). */
+function lettersFor(index: number): string {
+  let out = "";
+  let n = index;
+  do {
+    out = String.fromCharCode(97 + (n % 26)) + out;
+    n = Math.floor(n / 26);
+  } while (n > 0);
+  return out;
+}
+
+/** Replace private-looking data with [hidden]. Phone numbers are kept. */
 export function redactText(text: string): string {
-  let result = text;
+  const phones: string[] = [];
+  let result = text.replace(PHONE_NUMBER, (match: string, offset: number) => {
+    const before = text.slice(Math.max(0, offset - CONTEXT_CHARS), offset);
+    if (PRIVATE_NUMBER_CONTEXT.test(before)) return match;
+    phones.push(match);
+    return `\u0000PHONE${lettersFor(phones.length - 1)}\u0000`;
+  });
   for (const pattern of PRIVATE_TEXT_PATTERNS) {
     result = result.replace(pattern, "[hidden]");
   }
-  return result;
+  return result.replace(/\u0000PHONE([a-z]+)\u0000/g, (whole: string, letters: string) => {
+    let n = 0;
+    for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 97);
+    return phones[n] ?? whole;
+  });
 }

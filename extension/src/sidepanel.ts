@@ -5,18 +5,26 @@
 //   1. Safety verdict (website trust + page warnings; details folded under "Why?")
 //   2. "What would you like to do?": big numbered choices + "Show me where it is"
 //   3. "Remove it for me" cards, if Nudi found a sneaky extra
-//   4. "Ask a question" and "Family": folded, tap to open
+//   4. "Ask a question", "What Nudi stopped" and "Family": folded, tap to open
 //   5. Controls: Read aloud, Talk, text size, voice on/off
 //
 // The panel never touches the page itself; it sends small messages to the
 // content script (content.ts), which does the work inside the page.
+//
+// Going back to a page within 10 minutes shows Nudi's answer at once from a
+// small cache (pageCache.ts). "Read this page again" always reads it fresh.
 
 import { createAskBox, type AskBox } from "./lib/askBox";
 import { applyTextSize, buildControls } from "./lib/controls";
+import { clearExplain, explainSlot, startExplain } from "./lib/explainCard";
 import { buildFamilySection } from "./lib/familyPanel";
+import { addHistory, applyTrusted, getTrusted } from "./lib/history";
+import { buildHistorySection } from "./lib/historyPanel";
 import { askBackground } from "./lib/messages";
-import { buildChoice, buildFix, buildFold, buildHeader, buildVerdict } from "./lib/panelParts";
-import { loadSettings } from "./lib/settings";
+import { cachePage, getCachedPage, pageKey } from "./lib/pageCache";
+import { buildChoice, buildFix, buildFold, buildHeader, buildVerdict, buildVoiceQuestion } from "./lib/panelParts";
+import { getSettings, loadSettings, saveSettings } from "./lib/settings";
+import { buildSiteCheck } from "./lib/siteCheck";
 import { STYLES } from "./lib/styles";
 import { el } from "./lib/ui";
 import { speak, stopSpeaking } from "./lib/voice";
@@ -34,12 +42,16 @@ document.body.append(app);
 
 let currentTabId: number | null = null;
 let familySharing: boolean | null = null; // for the header badge
+let familyName: string | null = null; // "Sushant", once paired
 let lastSpokenUrl = "";
 let lastTaskSite = ""; // send "task started" once per website, not on every page
-// The current "Ask a question" section, so a right-click "Explain this" can use it.
-let currentAsk: { fold: HTMLDetailsElement; box: AskBox } | null = null;
 
-const AI_NAMES: Record<string, string> = { gemini: "Gemini AI", groq: "Groq AI", bedrock: "AWS Bedrock AI" };
+const AI_NAMES: Record<string, string> = {
+  ollama: "an AI on this computer (Ollama)",
+  gemini: "Gemini AI",
+  groq: "Groq AI",
+  bedrock: "AWS Bedrock AI",
+};
 
 // ---------- Talking to the page ----------
 
@@ -76,7 +88,7 @@ function showMessage(title: string, message: string, loading = false): void {
   heading.append(el("span", "", title));
   box.append(heading, el("p", "muted", message));
   if (loading) box.append(el("div", "skeleton"), el("div", "skeleton"), el("div", "skeleton"));
-  body.append(box, buildFamilySection(onFamilyChange));
+  body.append(explainSlot(), box, buildFamilySection(onFamilyChange));
   panel.append(buildHeader(familySharing), body);
   app.replaceChildren(panel);
 }
@@ -85,9 +97,11 @@ function showMessage(title: string, message: string, loading = false): void {
 function spokenText(result: SimplifyResponse, trust: TrustResult | null): string {
   const parts: string[] = [];
   if (trust?.level === "danger") parts.push("Warning. This website looks like a scam. Do not pay here.");
+  else if (result.decision.action === "block") parts.push("Warning. This page looks like a scam. Do not pay here.");
   else if (result.warnings.some((w) => w.level === "danger")) parts.push("Warning. This page looks risky.");
-  else if (trust?.level === "caution" || result.warnings.length > 0) parts.push("Be careful on this page.");
-  else parts.push("This website looks safe.");
+  else if (trust?.level === "caution" || result.decision.action === "ask_family" || result.warnings.length > 0) {
+    parts.push("Be careful on this page.");
+  } else parts.push("This website looks safe.");
   if (result.actions.length > 0) {
     parts.push("You can:");
     result.actions.forEach((a, i) => parts.push(`${i + 1}, ${a.label}.`));
@@ -103,7 +117,27 @@ function render(read: PageReadResult, result: SimplifyResponse, trust: TrustResu
   // Only the verdict and the choices are open. Everything else is folded,
   // so the panel is not a wall of text.
   const body = el("div", "body");
-  body.append(buildVerdict(trust, result.warnings));
+
+  // A right-click "Explain this" answer, if there is one, stays on top.
+  body.append(explainSlot());
+
+  // First time only: ask before Nudi ever speaks.
+  if (getSettings().readAloud === null) {
+    const question = buildVoiceQuestion(async (readAloud) => {
+      await saveSettings({ readAloud });
+      question.remove();
+      app.querySelector(".controls .toggle")?.setAttribute("aria-pressed", String(readAloud));
+      if (readAloud) speak(spokenText(result, trust));
+    });
+    body.append(question);
+  }
+
+  // "I think this website is fine": the way to undo a wrong warning about the WEBSITE.
+  const siteCheck =
+    trust && trust.level !== "safe" && !trust.reasons.some((r) => r.code === "LOCAL")
+      ? buildSiteCheck(trust.domain, trust.level, trust.domain_age_days, () => analyze({ quiet: true }))
+      : null;
+  body.append(buildVerdict(trust, result.warnings, result.decision, familyName, siteCheck));
   if (result.mode === "bedrock") body.append(el("p", "summary", result.summary)); // the mock summary adds nothing
 
   // 1. Choices
@@ -123,6 +157,10 @@ function render(read: PageReadResult, result: SimplifyResponse, trust: TrustResu
   body.append(choices);
   // Say who chose these: the AI, or Nudi's own offline rules.
   body.append(el("p", "ai-note", AI_NAMES[result.mode] ? `Choices picked with help from ${AI_NAMES[result.mode]}.` : "Choices picked by Nudi's offline rules."));
+  // Some websites change without reloading (or were still loading): let the person ask again.
+  const readAgain = el("button", "link-btn", "Read this page again");
+  readAgain.onclick = () => analyze({ fresh: true });
+  body.append(readAgain);
 
   // 2. Fixes: shown open, because they are something Nudi can DO for you.
   read.fixes.forEach((message, index) =>
@@ -132,7 +170,7 @@ function render(read: PageReadResult, result: SimplifyResponse, trust: TrustResu
         () => sendToPage({ type: "nudi:fix", index }),
         () => {
           speak("Done. I removed the extra. Please check the new total.");
-          setTimeout(() => analyze(true), 2000); // the page changed: read it again
+          setTimeout(() => analyze({ quiet: true, fresh: true }), 2000); // the page changed: read it again
         },
       ),
     ),
@@ -143,9 +181,11 @@ function render(read: PageReadResult, result: SimplifyResponse, trust: TrustResu
   const askFold = buildFold("Ask a question", false);
   askFold.body.append(askBox.element);
   body.append(askFold.fold);
-  currentAsk = { fold: askFold.fold, box: askBox };
 
-  // 4. Family (folded; it opens by itself when someone asks to connect)
+  // 4. What Nudi stopped (folded; kept on this computer only)
+  body.append(buildHistorySection(() => analyze({ quiet: true })));
+
+  // 5. Family (folded; it opens by itself when someone asks to connect)
   body.append(buildFamilySection(onFamilyChange));
 
   const controls = buildControls({
@@ -159,21 +199,22 @@ function render(read: PageReadResult, result: SimplifyResponse, trust: TrustResu
 
   panel.append(body, controls);
   app.replaceChildren(panel);
-  checkExplainRequest();
 }
 
 // ---------- "Explain this with Nudi" (right-click menu) ----------
 
-/** The background worker leaves the selected text in session storage; show it here. */
+/**
+ * The background worker leaves the selected text in session storage. Show the
+ * answer card at once, whether the panel was just opened (still reading the
+ * page) or was already open.
+ */
 async function checkExplainRequest(): Promise<void> {
-  if (!currentAsk) return;
   const { nudiExplain } = await chrome.storage.session.get("nudiExplain");
   const request = nudiExplain as { text: string; title: string; at: number } | undefined;
-  if (!request || Date.now() - request.at > 60_000) return; // old requests are ignored
+  if (!request) return;
   await chrome.storage.session.remove("nudiExplain");
-  currentAsk.fold.open = true;
-  currentAsk.fold.scrollIntoView({ behavior: "smooth", block: "start" });
-  currentAsk.box.explain(request.text, request.title);
+  if (Date.now() - request.at > 60_000) return; // old requests are ignored
+  startExplain(request.text, request.title);
 }
 
 chrome.storage.session.onChanged.addListener((changes) => {
@@ -207,6 +248,7 @@ function handleSpoken(said: string, result: SimplifyResponse, askBox: AskBox): v
 }
 
 function onFamilyChange(state: FamilyState): void {
+  familyName = state.status === "paired" ? state.familyName : null;
   const sharing = state.status === "paired" ? state.sharingOn : null;
   if (sharing === familySharing) return;
   familySharing = sharing;
@@ -219,39 +261,72 @@ function onFamilyChange(state: FamilyState): void {
 
 let analyzing = 0; // a newer analysis cancels an older one
 
-/** quiet = true when refreshing after a fix, so Nudi does not repeat everything aloud. */
-async function analyze(quiet = false): Promise<void> {
+/** Ask the backend about the page: the simple version, and how much to trust the website. */
+async function askBackend(read: PageReadResult): Promise<{ result: SimplifyResponse; trust: TrustResult | null }> {
+  const [result, trust] = await Promise.all([
+    askBackground<SimplifyResponse>({ type: "simplify", page: read.page }),
+    askBackground<TrustResult>({
+      type: "trust",
+      request: {
+        url: read.page.url,
+        has_payment: read.hasPayment,
+        has_login: read.hasLogin,
+        demo_domain: read.demoDomain,
+        demo_age_days: read.demoAgeDays,
+      },
+    }).catch(() => null), // the trust check is a bonus: never block the panel on it
+  ]);
+  // An older backend (for example an AWS deploy not updated yet) sends no decision.
+  result.decision ??= { action: "watch", reasons: [], source: "rules" };
+  return { result, trust };
+}
+
+/**
+ * quiet: do not show "Reading this page…" or speak again (after a fix or a change).
+ * fresh: ask the backend again even if this page is in the cache.
+ */
+async function analyze({ quiet = false, fresh = false } = {}): Promise<void> {
   const myRun = ++analyzing;
   await loadSettings();
   currentTabId = await activeTabId();
-  if (!quiet) showMessage("Reading this page…", "One moment. I am making it simple for you.", true);
+  // Show "Reading…" only if it takes a moment, so a cached page does not flash.
+  const loading = quiet
+    ? undefined
+    : window.setTimeout(() => {
+        if (myRun === analyzing) showMessage("Reading this page…", "One moment. I am making it simple for you.", true);
+      }, 250);
 
   let read: PageReadResult;
   try {
     read = await readCurrentPage();
   } catch {
+    window.clearTimeout(loading);
     showMessage("Nudi cannot help on this page", "Chrome does not let extensions work on its own pages. Open a normal website.");
     return;
   }
 
   try {
-    // Simplify the page and check the website at the same time.
-    const [result, trust] = await Promise.all([
-      askBackground<SimplifyResponse>({ type: "simplify", page: read.page }),
-      askBackground<TrustResult>({
-        type: "trust",
-        request: {
-          url: read.page.url,
-          has_payment: read.hasPayment,
-          has_login: read.hasLogin,
-          demo_domain: read.demoDomain,
-          demo_age_days: read.demoAgeDays,
-        },
-      }).catch(() => null), // the trust check is a bonus: never block the panel on it
-    ]);
+    const key = pageKey(read.page);
+    const cached = fresh ? null : await getCachedPage(key);
+    const answer = cached ?? (await askBackend(read));
+    const trusted = await getTrusted();
+    window.clearTimeout(loading);
     if (myRun !== analyzing) return; // the user already moved to another page
+    if (!cached) cachePage(key, answer.result, answer.trust);
 
-    await sendToPage({ type: "nudi:set-trust", trust }).catch(() => {});
+    // Work on copies, so the cached answer stays as the backend gave it.
+    const result: SimplifyResponse = { ...answer.result, decision: { ...answer.result.decision } };
+    const rawTrust = answer.trust;
+
+    // A website someone marked as fine is shown as safe (with who said so).
+    const trust = applyTrusted(rawTrust, trusted);
+    // Marked fine also drops "ask family first" for this website. A clear scam
+    // decision about the page ("block") still stands.
+    if (trust !== rawTrust && result.decision.action === "ask_family") {
+      result.decision = { action: "watch", reasons: [], source: "rules" };
+    }
+
+    await sendToPage({ type: "nudi:set-trust", trust, decision: result.decision }).catch(() => {});
     render(read, result, trust);
 
     // Family Link events: only that a task started and the warning level. No page details.
@@ -263,6 +338,11 @@ async function analyze(quiet = false): Promise<void> {
     const worst = trust?.level === "danger" || result.warnings.some((w) => w.level === "danger") ? "danger"
       : trust?.level === "caution" || result.warnings.some((w) => w.level === "caution") ? "caution" : null;
     if (worst) askBackground({ type: "family:event", event: { kind: "warning_shown", level: worst } }).catch(() => {});
+    // "What Nudi stopped": a scam website is listed (once a day per website), with the reasons.
+    if (trust?.level === "danger") {
+      const reasons = trust.reasons.map((r) => r.message_simple);
+      addHistory({ site: trust.domain, what: "scam_site", risk: "danger", amount: null, reasons }).catch(() => {});
+    }
 
     // Speak once per page (not again after a fix refresh).
     if (!quiet && read.page.url !== lastSpokenUrl) {
@@ -270,20 +350,27 @@ async function analyze(quiet = false): Promise<void> {
       speak(spokenText(result, trust));
     }
   } catch {
-    showMessage("Nudi cannot connect", "The Nudi helper server is not running. Please start it, then try again.");
+    window.clearTimeout(loading);
+    if (myRun === analyzing) {
+      showMessage("Nudi cannot connect", "The Nudi helper server is not running. Please start it, then try again.");
+    }
   }
 }
 
 // Follow the user: re-read when they switch tabs or a page finishes loading.
+// An explanation belongs to the page it was asked on, so it goes away too.
 chrome.tabs.onActivated.addListener(() => {
   stopSpeaking();
+  clearExplain();
   analyze();
 });
 chrome.tabs.onUpdated.addListener((tabId, info) => {
   if (tabId === currentTabId && info.status === "complete") {
     stopSpeaking();
+    clearExplain();
     analyze();
   }
 });
 
 analyze();
+checkExplainRequest(); // the panel may have been opened BY a right-click "Explain this"

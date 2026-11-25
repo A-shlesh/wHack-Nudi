@@ -25,13 +25,27 @@ export interface PageWarning {
   source?: "rules" | "ai"; // "ai" = an extra warning from the AI, on top of Nudi's rules
 }
 
-/** Which AI answered. "mock" = Nudi's offline rules. */
-export type AiMode = "gemini" | "groq" | "bedrock" | "mock";
+/** Which AI answered. "ollama" runs on this computer; "mock" = Nudi's offline rules. */
+export type AiMode = "ollama" | "gemini" | "groq" | "bedrock" | "mock";
+
+/**
+ * What Nudi does if the user tries to pay on this page (mild to strict):
+ *   watch       the normal "Check before you pay" question
+ *   ask_family  Nudi suggests asking family first; paying alone needs the slow "pay anyway"
+ *   block       payment is blocked; family can unlock it, or the slow "pay anyway"
+ * Nudi's rules decide; the AI can only make it stricter.
+ */
+export interface Decision {
+  action: "watch" | "ask_family" | "block";
+  reasons: string[];
+  source: "rules" | "ai";
+}
 
 export interface SimplifyResponse {
   summary: string;
   actions: Action[];
   warnings: PageWarning[];
+  decision: Decision;
   mode: AiMode;
 }
 
@@ -93,13 +107,20 @@ export type BackgroundRequest =
   | { type: "trust"; request: TrustRequest }
   | { type: "speak"; text: string }
   | { type: "health" }
+  | { type: "voice:claim"; id: string }
   | { type: "family:state" }
   | { type: "family:start"; elderName: string }
   | { type: "family:answer"; allow: boolean }
   | { type: "family:sharing"; on: boolean }
   | { type: "family:disconnect" }
   | { type: "family:event"; event: FamilyEvent }
-  | { type: "family:ask-approval"; site: string; amount: string | null; reasons: string[]; ageDays: number | null }
+  | {
+      type: "family:ask-approval";
+      kind: "payment" | "site"; // "site" = "I think this website is fine, please check"
+      site: string;
+      amount: string | null;
+      ageDays: number | null;
+    }
   | { type: "family:approval-status"; approvalId: string };
 
 /** The ONLY kinds of things Nudi may share with family. No pages, no typing, no history. */
@@ -108,7 +129,8 @@ export type FamilyEvent =
   | { kind: "warning_shown"; level: "caution" | "danger" }
   | { kind: "addon_removed"; amount_saved: number }
   | { kind: "payment_confirmed"; amount: number | null }
-  | { kind: "payment_blocked"; amount: number | null };
+  | { kind: "payment_blocked"; amount: number | null }
+  | { kind: "payment_overridden"; amount: number | null };
 
 // Every reply from the background worker has this shape.
 export interface BackgroundReply<T> {
@@ -134,4 +156,4 @@ export type TabRequest =
   | { type: "nudi:run"; action: Action }
   | { type: "nudi:show-me"; elementId: string; label: string }
   | { type: "nudi:fix"; index: number }
-  | { type: "nudi:set-trust"; trust: TrustResult | null };
+  | { type: "nudi:set-trust"; trust: TrustResult | null; decision: Decision | null };

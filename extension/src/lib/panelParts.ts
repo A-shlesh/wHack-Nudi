@@ -2,7 +2,7 @@
 // verdict, the big choices, and the "watch out" notices.
 // actionView.ts puts these blocks together.
 
-import type { Action, PageWarning, TrustResult } from "../types";
+import type { Action, Decision, PageWarning, TrustResult } from "../types";
 import { el, iconButton, iconSpan, logoSpan } from "./ui";
 
 // ---------- Header ----------
@@ -24,15 +24,33 @@ export function buildHeader(sharing: boolean | null): HTMLElement {
 
 type Level = "safe" | "careful" | "risky";
 
-/** The worst of: the website trust check, and the warnings found on the page. */
-function overallLevel(trust: TrustResult | null, warnings: PageWarning[]): Level {
-  if (trust?.level === "danger" || warnings.some((w) => w.level === "danger")) return "risky";
-  if (trust?.level === "caution" || warnings.some((w) => w.level === "caution")) return "careful";
+/** The worst of: the website trust check, the warnings found on the page, and Nudi's decision. */
+function overallLevel(trust: TrustResult | null, warnings: PageWarning[], decision: Decision | null): Level {
+  if (trust?.level === "danger" || decision?.action === "block" || warnings.some((w) => w.level === "danger")) return "risky";
+  if (trust?.level === "caution" || decision?.action === "ask_family" || warnings.some((w) => w.level === "caution")) {
+    return "careful";
+  }
   return "safe";
 }
 
-export function buildVerdict(trust: TrustResult | null, warnings: PageWarning[]): HTMLElement {
-  const level = overallLevel(trust, warnings);
+/** What happens if the person pays here, in one plain line: every decision is explained. */
+function paymentLine(trust: TrustResult | null, decision: Decision | null, familyName: string | null): string | null {
+  if (trust?.level === "danger" || decision?.action === "block") return "If you try to pay here, Nudi will stop the payment.";
+  if (decision?.action === "ask_family") {
+    return `If you try to pay here, Nudi will ask you to check with ${familyName ?? "someone you trust"} first.`;
+  }
+  return null;
+}
+
+/** extra: shown at the bottom of the verdict (for example "I think this website is fine"). */
+export function buildVerdict(
+  trust: TrustResult | null,
+  warnings: PageWarning[],
+  decision: Decision | null = null,
+  familyName: string | null = null,
+  extra: HTMLElement | null = null,
+): HTMLElement {
+  const level = overallLevel(trust, warnings, decision);
   const scamSite = trust?.level === "danger";
 
   // One short line under the title. The details are folded under "Why?".
@@ -51,6 +69,8 @@ export function buildVerdict(trust: TrustResult | null, warnings: PageWarning[])
   heading.setAttribute("tabindex", "-1"); // so we can move keyboard focus here
   heading.append(iconSpan(level === "safe" ? "shield" : "alert", 26), el("span", "", title));
   verdict.append(heading, el("p", "", text));
+  const pay = paymentLine(trust, decision, familyName);
+  if (pay) verdict.append(el("p", "verdict-pay", pay));
 
   // Website trust: the domain and a score bar.
   if (trust) {
@@ -72,12 +92,17 @@ export function buildVerdict(trust: TrustResult | null, warnings: PageWarning[])
       .filter((r) => r.code !== "LOCAL")
       .map((r) => ({ level: trust!.level === "safe" ? "info" : trust!.level, message: r.message_simple }) as PageWarning),
     ...[...warnings].sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]),
+    // An AI decision's own reasons, when they say something the warnings do not.
+    ...(decision?.source === "ai" ? decision.reasons : [])
+      .filter((r) => !warnings.some((w) => w.message === r))
+      .map((r): PageWarning => ({ level: decision!.action === "block" ? "danger" : "caution", message: r, source: "ai" })),
   ];
   if (reasons.length > 0) {
     const why = buildFold(`Why? (${reasons.length})`, false);
     reasons.forEach((r) => why.body.append(buildWarning(r)));
     verdict.append(why.fold);
   }
+  if (extra) verdict.append(extra);
   return verdict;
 }
 
@@ -153,4 +178,22 @@ export function buildFix(message: string, apply: () => void, onFixed: () => void
   content.append(button);
   notice.append(iconSpan("info", 22), content);
   return notice;
+}
+
+// ---------- First-time question: read aloud? ----------
+
+/** Asked once. Nudi stays silent until the person answers. onAnswer(true) = read aloud. */
+export function buildVoiceQuestion(onAnswer: (readAloud: boolean) => void): HTMLElement {
+  const card = el("section", "voice-question");
+  card.setAttribute("aria-label", "Read aloud?");
+  const heading = el("div", "voice-question-title");
+  heading.append(iconSpan("speaker", 24), el("span", "", "Would you like me to read things aloud?"));
+  const yes = el("button", "btn primary", "Yes, read aloud");
+  const no = el("button", "btn secondary", "No, thanks");
+  yes.onclick = () => onAnswer(true);
+  no.onclick = () => onAnswer(false);
+  const buttons = el("div", "controls-row");
+  buttons.append(yes, no);
+  card.append(heading, el("p", "muted", "You can change this any time with the Voice switch below."), buttons);
+  return card;
 }
