@@ -1,0 +1,44 @@
+# Runs Nudi's checks on every push and pull request to main:
+#   - backend: all Python tests (offline mock mode, no keys needed)
+#   - extension: TypeScript check and build
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.3.0
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: pip install -r backend/requirements-dev.txt
+      - name: Test
+        working-directory: backend
+        run: python -m pytest -q
+
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.1.0
+        with:
+          node-version: "20"
+      - name: Install
+        working-directory: extension
+        run: npm ci
+      - name: Type check
+        working-directory: extension
+        run: npm run typecheck
+      - name: Build
+        working-directory: extension
+        run: npm run build

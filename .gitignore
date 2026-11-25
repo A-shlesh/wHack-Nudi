@@ -28,3 +28,6 @@ backend/nudi.db
 .aws-sam/
 samconfig.toml
 backend/static/
+
+# Packaged extension (made by npm run package)
+extension/nudi-extension.zip

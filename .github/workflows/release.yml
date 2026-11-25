@@ -1,0 +1,41 @@
+# Makes a ready-to-install extension for judges.
+# When a tag like v1.0.0 is pushed, this builds the extension and attaches
+# nudi-extension-<tag>.zip to a GitHub Release. No build tools needed to use it.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.1.0
+        with:
+          node-version: "20"
+      - name: Build the extension
+        working-directory: extension
+        run: |
+          npm ci
+          npm run build
+      - name: Zip it (manifest.json at the top of the zip)
+        run: |
+          cd extension/dist
+          zip -r "../../nudi-extension-${GITHUB_REF_NAME}.zip" .
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "nudi-extension-${GITHUB_REF_NAME}.zip" \
+            --title "Nudi $GITHUB_REF_NAME" \
+            --notes "How to install:
+          1. Download nudi-extension-${GITHUB_REF_NAME}.zip below and unzip it.
+          2. Open chrome://extensions, turn on Developer mode (top right).
+          3. Click Load unpacked and choose the unzipped folder.
+          4. Start the Nudi helper: double-click start.bat (Windows) or run ./start.sh (macOS/Linux) from the repo.
+          5. Open http://localhost:8787/demo/ and click the Nudi icon (or press Alt+Shift+N)."
