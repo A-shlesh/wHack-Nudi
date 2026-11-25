@@ -10,8 +10,9 @@
 
   Run:      .\start.ps1            (or double-click start.bat)
   Phone:    .\start.ps1 -Lan       (lets a phone on the same Wi-Fi open the family dashboard)
+  Port:     .\start.ps1 -Port 8790 (if 8787 is taken; the extension expects 8787)
 #>
-param([switch]$Lan)
+param([switch]$Lan, [int]$Port = 8787)
 
 $ErrorActionPreference = "Stop"
 $backend = Join-Path $PSScriptRoot "backend"
@@ -56,7 +57,7 @@ if (-not (Test-Path ".env")) {
 }
 
 # ---- 4. Start ----
-$port = 8787
+$port = $Port
 $busy = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
 if ($busy) {
     Write-Host "`nSomething is already using port $port (maybe Nudi is already running). Open http://localhost:$port/health to check." -ForegroundColor Yellow

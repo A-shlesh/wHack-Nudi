@@ -13,7 +13,7 @@
 
 set -e
 cd "$(dirname "$0")/backend"
-PORT=8787
+PORT="${NUDI_PORT:-8787}"  # change with NUDI_PORT=8790 ./start.sh (the extension expects 8787)
 
 # ---- 1. Python ----
 PYTHON=""

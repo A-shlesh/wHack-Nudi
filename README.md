@@ -1,8 +1,52 @@
 # Nudi
 
-**Nudi** (ನುಡಿ, Kannada for "speak") is a Chrome extension with a small backend that helps elderly and low-tech people get things done on websites, safely.
+[![Tests](https://github.com/A-shlesh/wHack-Nudi/actions/workflows/ci.yml/badge.svg)](https://github.com/A-shlesh/wHack-Nudi/actions/workflows/ci.yml)
+[![Download](https://img.shields.io/github/v/release/A-shlesh/wHack-Nudi?label=download%20extension)](https://github.com/A-shlesh/wHack-Nudi/releases/latest)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
-Nudi opens in **Chrome's side panel, next to the website**, and:
+**Nudi** (ನುಡಿ, Kannada for "speak") sits next to any website in Chrome and helps elderly people use it safely: it makes the page simple, spots fake websites and scams, and **always checks before money is spent**, with family help one tap away.
+
+![Nudi stopping a payment on a fake BESCOM bill website](docs/images/nudi-scam-blocked.png)
+
+## The problem
+
+Older people in India are moving online for bills, banking and shopping, often alone. Pages are cluttered, timers rush them, extras are ticked without asking, and fake "BESCOM" or "KYC update" websites look exactly like the real ones. One wrong tap can empty a pension account. Nudi is a calm helper beside the page that explains, warns, and stops a payment before it is too late.
+
+## Try it in 5 minutes
+
+You need **Google Chrome** and **Python 3.11+** ([download](https://www.python.org/downloads/); on Windows tick "Add python.exe to PATH"). No API keys needed.
+
+1. **Get the extension:** download `nudi-extension-….zip` from the [latest release](https://github.com/A-shlesh/wHack-Nudi/releases/latest) and unzip it.
+2. **Add it to Chrome:** open `chrome://extensions`, turn on **Developer mode** (top right), click **Load unpacked**, and pick the unzipped folder. Pin Nudi to the toolbar.
+3. **Start the Nudi helper:** download or clone this repo, then double-click **`start.bat`** (Windows) or run **`./start.sh`** (macOS/Linux). Keep that window open.
+4. **Open the demo pages** and click the Nudi icon (or press **Alt+Shift+N**):
+   - Normal bill page: http://localhost:8787/demo/
+   - Fake BESCOM website: http://localhost:8787/demo/bescom-scam.html
+5. **Try, in order:** "Show me where it is" → "Remove it for me" (₹99 extra) → "Ask a question" → **Pay** on the bill page → **Pay** on the fake website (blocked) → select words, right-click → **Explain this with Nudi**.
+
+Family Link: open http://localhost:8787/dashboard/ in a second window (or on a phone with `start.bat -Lan` / `./start.sh --lan`) and follow [Family Link](#3-try-the-demo) below.
+
+Nudi also works on normal websites (try a shop product page), except Chrome's own pages and PDFs.
+
+## What Nudi does
+
+| | |
+|---|---|
+| ![Safety verdict and big simple choices](docs/images/nudi-bill-page.png) | ![Reasons in plain words, including what the AI noticed](docs/images/nudi-why.png) |
+| **A calm verdict and a few big choices** next to the page | **"Why?"** in plain words; the AI can add warnings, never remove them |
+| ![Sneaky extra removed in one tap](docs/images/nudi-remove-extra.png) | ![Check before you pay, with No as the default](docs/images/nudi-payment-check.png) |
+| **"Remove it for me"** unticks a ₹99 extra nobody asked for | **"Check before you pay"**: the amount in large text, "No" is the default |
+| ![Fake BESCOM website: trust score 0](docs/images/nudi-scam-verdict.png) | ![Explain this with Nudi](docs/images/nudi-explain.png) |
+| **Fake website check:** 9 days old, copies the BESCOM name, trust 0/100 | **"Explain this with Nudi"**: right-click any confusing words |
+
+<p align="center"><img src="docs/images/nudi-family-dashboard.png" alt="Family dashboard on a phone: payment request with Approve and Block, and the weekly note" width="320"></p>
+<p align="center"><b>Family Link:</b> Sushant gets the request on his phone with Nudi's reasons and a voice note, and taps <b>Approve</b> or <b>Block</b>.</p>
+
+## Why rule-based and human-in-the-loop
+
+The AI only **suggests**: summaries, choices, extra warnings, explanations. The things that protect money are **fixed rules** the AI cannot change: the payment check, scam blocking, the website trust check and the privacy filter. The AI can make a decision *stricter*, never softer, and a person (the elder, or their family) always makes the final call. If every AI service is down, Nudi keeps working on its own rules.
+
+## Everything Nudi does
 
 - **Checks the website itself**: how old it is, whether it pretends to be a bank or brand (BESCOM, SBI, HDFC…), and whether it uses https
 - **Shows a safety verdict**: "This website looks safe", "Be careful", or "This website looks like a scam", with the reasons in plain words
@@ -41,15 +85,26 @@ Nudi opens in **Chrome's side panel, next to the website**, and:
 
 ## How it works
 
-```
- Website tab                      Chrome side panel                Background worker        FastAPI backend
- ┌──────────────────┐  messages  ┌──────────────────┐  messages  ┌────────────────┐  HTTPS  ┌───────────────────────┐
- │ content script   │◄──────────►│ Nudi panel       │◄──────────►│ only part that │◄───────►│ /simplify  AI or mock  │
- │ - reads page     │            │ - verdict        │            │ calls backend  │         │ /trust     domain check│
- │   (no passwords, │            │ - big choices    │            └────────────────┘         │ /ask       questions   │
- │   no typing)     │            │ - ask, talk      │                                       │ /family/*  Family Link │
- │ - payment guard  │            │ - Family Link    │                                       │ /dashboard family page │
- └──────────────────┘            └──────────────────┘                                       └───────────────────────┘
+```mermaid
+flowchart LR
+  subgraph Chrome
+    page["Website tab<br/>content script:<br/>reads the page safely<br/>payment guard"]
+    panel["Side panel<br/>verdict, choices,<br/>ask, talk, Family"]
+    worker["Background worker<br/>only part that calls the helper"]
+    page <--> panel
+    panel <--> worker
+  end
+  subgraph Helper["Nudi helper (FastAPI)"]
+    simplify["/simplify, /ask, /explain"]
+    trust["/trust<br/>age, lookalike, https"]
+    family["/family, /approvals<br/>SQLite locally, DynamoDB on AWS"]
+  end
+  worker <--> simplify
+  worker <--> trust
+  worker <--> family
+  simplify --> ai["AI: Ollama, Gemini, Groq<br/>then offline rules"]
+  trust --> rdap["rdap.org<br/>domain age"]
+  family <--> phone["Family dashboard<br/>on a phone"]
 ```
 
 | Part | Where | What it does |
@@ -105,6 +160,10 @@ You need **Python 3.11+**, **Node 18+** and **Google Chrome 116+**.
 
 ### 1. Backend
 
+**Easiest:** double-click `start.bat` (Windows) or run `./start.sh` (macOS/Linux). It checks Python, sets everything up the first time, and starts the helper on port 8787. Add `-Lan` / `--lan` to open the family dashboard from a phone on the same Wi-Fi.
+
+By hand:
+
 ```powershell
 cd backend
 python -m venv .venv
@@ -119,6 +178,8 @@ On macOS/Linux use `source .venv/bin/activate` and `cp .env.example .env`.
 Check it: open http://localhost:8787/health. You should see `{"status":"ok","ai":"mock","voice":"browser"}`.
 
 ### 2. Extension
+
+**Easiest:** download the ready-made zip from [Releases](https://github.com/A-shlesh/wHack-Nudi/releases/latest), unzip it, and load that folder (steps below). To build it yourself:
 
 ```powershell
 cd extension
@@ -268,3 +329,17 @@ Free for the elder and their family. The plan is to charge the organisations tha
 - Scam detection is phrase-based plus the domain check (and the AI when one is set up)
 - The brand list in `backend/app/trust/brands.json` is short and should be checked against each brand's real websites
 - Demo pages pretend to be other websites with `<meta name="nudi-demo-domain">`; this only works on localhost or the Nudi backend's own address
+- Tested most on our demo pages; real websites change often, so some pages give fewer choices
+- The website trust check needs internet for the age lookup
+
+## Next steps
+
+- Kannada and Hindi, on screen and in the voice
+- Testing with older people and their families, then on real bank and bill websites
+- The AWS deployment (prepared in `template.yaml`) so families can use the dashboard from anywhere
+
+## Team
+
+Built for wHACK by **Ashlesh**, **Sushant**, **Pranav** and **Sandesh**.
+
+Licence: [MIT](LICENSE).
