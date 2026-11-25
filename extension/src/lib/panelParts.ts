@@ -154,3 +154,21 @@ export function buildFix(message: string, apply: () => void, onFixed: () => void
   notice.append(iconSpan("info", 22), content);
   return notice;
 }
+
+// ---------- First-time question: read aloud? ----------
+
+/** Asked once. Nudi stays silent until the person answers. onAnswer(true) = read aloud. */
+export function buildVoiceQuestion(onAnswer: (readAloud: boolean) => void): HTMLElement {
+  const card = el("section", "voice-question");
+  card.setAttribute("aria-label", "Read aloud?");
+  const heading = el("div", "voice-question-title");
+  heading.append(iconSpan("speaker", 24), el("span", "", "Would you like me to read things aloud?"));
+  const yes = el("button", "btn primary", "Yes, read aloud");
+  const no = el("button", "btn secondary", "No, thanks");
+  yes.onclick = () => onAnswer(true);
+  no.onclick = () => onAnswer(false);
+  const buttons = el("div", "controls-row");
+  buttons.append(yes, no);
+  card.append(heading, el("p", "muted", "You can change this any time with the Voice switch below."), buttons);
+  return card;
+}

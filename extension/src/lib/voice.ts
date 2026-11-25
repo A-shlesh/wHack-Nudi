@@ -1,7 +1,9 @@
 // Reads text aloud. First tries the natural ElevenLabs voice (through the
 // backend). If that is not set up, or fails, it uses the browser's own
 // built-in voice (speechSynthesis), so narration always works.
-// Follows the user's setting: voice on/off. Speaks at normal speed.
+// Follows the user's setting: read aloud on/off. Speaks at normal speed.
+// Only ONE Nudi voice talks at a time: the side panel and the web page each
+// have a voice, and when one starts it tells the other to stop.
 
 import { askBackground } from "./messages";
 import { getSettings } from "./settings";
@@ -24,6 +26,26 @@ export function stopSpeaking(): void {
   speechSynthesis.cancel();
   onSpeakingChange(false);
 }
+
+// ---------- One voice at a time ----------
+
+// A random name for this voice (one in the side panel, one in each page).
+const VOICE_ID = Math.random().toString(36).slice(2);
+
+/** Tell the other Nudi voices "I am talking now", so they go quiet. */
+function claimTheVoice(): void {
+  try {
+    chrome.runtime.sendMessage({ type: "voice:claim", id: VOICE_ID }).catch(() => {});
+  } catch {
+    /* the extension was reloaded: nothing to tell */
+  }
+}
+
+// When another Nudi voice starts talking, this one stops.
+chrome.runtime.onMessage.addListener((message: { type?: string; id?: string }) => {
+  if (message?.type === "voice:claim" && message.id !== VOICE_ID) stopSpeaking();
+  return false;
+});
 
 // Clearest voices first. Chrome's "Google" voices sound the most natural (they
 // need internet); the Microsoft ones work offline. "Microsoft Heera" (Indian
@@ -69,13 +91,14 @@ function speakWithBrowser(text: string): void {
 
 /** Speak only if the user has the voice turned on. */
 export async function speak(text: string): Promise<void> {
-  if (!getSettings().voiceOn) return;
+  if (getSettings().readAloud !== true) return; // off, or not asked yet
   await speakAlways(text);
 }
 
 /** Speak even if automatic voice is off (used by the "Read aloud" button). */
 export async function speakAlways(text: string): Promise<void> {
   stopSpeaking();
+  claimTheVoice();
   const myTurn = speechTurn;
   onSpeakingChange(true);
   try {

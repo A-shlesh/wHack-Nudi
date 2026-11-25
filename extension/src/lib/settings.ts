@@ -1,14 +1,14 @@
 // The user's Nudi preferences, remembered in Chrome's storage so they stay
 // the same on every website and after a restart.
 //   textSize: 0 = large, 1 = larger, 2 = largest
-//   voiceOn:  read things aloud automatically
+//   readAloud: read things aloud automatically (null = not asked yet; Nudi asks once)
 
 export interface Settings {
   textSize: 0 | 1 | 2;
-  voiceOn: boolean;
+  readAloud: boolean | null;
 }
 
-const DEFAULTS: Settings = { textSize: 0, voiceOn: true };
+const DEFAULTS: Settings = { textSize: 0, readAloud: null };
 
 // How much bigger each text size makes everything.
 export const TEXT_SCALES = [1, 1.15, 1.3];

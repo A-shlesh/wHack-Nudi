@@ -93,6 +93,7 @@ export type BackgroundRequest =
   | { type: "trust"; request: TrustRequest }
   | { type: "speak"; text: string }
   | { type: "health" }
+  | { type: "voice:claim"; id: string }
   | { type: "family:state" }
   | { type: "family:start"; elderName: string }
   | { type: "family:answer"; allow: boolean }

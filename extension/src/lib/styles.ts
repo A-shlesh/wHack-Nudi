@@ -310,6 +310,14 @@ export const STYLES = `
   .waiting { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
   .waiting h2 { margin: 0; }
 
+  /* First-time "read aloud?" question */
+  .voice-question {
+    margin-bottom: 16px; padding: 16px; border-radius: 12px;
+    background: var(--brand-tint); border: 2px solid var(--brand);
+  }
+  .voice-question-title { display: flex; align-items: center; gap: 10px; font-size: calc(20px * var(--scale)); font-weight: 700; color: var(--brand); }
+  .voice-question p { margin: 6px 0 12px; }
+
   /* AI features */
   .ai-note { margin: 10px 0 0; font-size: 14px; color: var(--ink-2); }
   .ai-tag {

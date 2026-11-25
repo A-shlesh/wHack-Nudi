@@ -15,8 +15,8 @@ import { createAskBox, type AskBox } from "./lib/askBox";
 import { applyTextSize, buildControls } from "./lib/controls";
 import { buildFamilySection } from "./lib/familyPanel";
 import { askBackground } from "./lib/messages";
-import { buildChoice, buildFix, buildFold, buildHeader, buildVerdict } from "./lib/panelParts";
-import { loadSettings } from "./lib/settings";
+import { buildChoice, buildFix, buildFold, buildHeader, buildVerdict, buildVoiceQuestion } from "./lib/panelParts";
+import { getSettings, loadSettings, saveSettings } from "./lib/settings";
 import { STYLES } from "./lib/styles";
 import { el } from "./lib/ui";
 import { speak, stopSpeaking } from "./lib/voice";
@@ -103,6 +103,18 @@ function render(read: PageReadResult, result: SimplifyResponse, trust: TrustResu
   // Only the verdict and the choices are open. Everything else is folded,
   // so the panel is not a wall of text.
   const body = el("div", "body");
+
+  // First time only: ask before Nudi ever speaks.
+  if (getSettings().readAloud === null) {
+    const question = buildVoiceQuestion(async (readAloud) => {
+      await saveSettings({ readAloud });
+      question.remove();
+      app.querySelector(".controls .toggle")?.setAttribute("aria-pressed", String(readAloud));
+      if (readAloud) speak(spokenText(result, trust));
+    });
+    body.append(question);
+  }
+
   body.append(buildVerdict(trust, result.warnings));
   if (result.mode === "bedrock") body.append(el("p", "summary", result.summary)); // the mock summary adds nothing
 
