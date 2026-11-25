@@ -182,6 +182,30 @@ function drawFeed(feed) {
   $("empty").hidden = feed.events.length > 0;
 }
 
+// ---------- Weekly note (AI-written, or from the numbers when offline) ----------
+
+const DIGEST_EVERY_MS = 60_000; // the note changes slowly; this also saves the free AI limit
+let lastDigestAt = 0;
+let lastEventCount = -1;
+
+const AI_NAMES = { gemini: "Gemini AI", groq: "Groq AI", bedrock: "AWS Bedrock AI" };
+
+async function refreshDigest(eventCount) {
+  const due = Date.now() - lastDigestAt > DIGEST_EVERY_MS || eventCount !== lastEventCount;
+  if (!due) return;
+  lastDigestAt = Date.now();
+  lastEventCount = eventCount;
+  try {
+    const response = await api(`/family/${session.familyId}/digest`);
+    if (!response.ok) return;
+    const { digest, mode } = await response.json();
+    $("digest-text").textContent = digest;
+    $("digest-by").textContent = AI_NAMES[mode] ? `Written by Nudi with ${AI_NAMES[mode]}` : "Written by Nudi from this week's numbers";
+  } catch {
+    /* keep the last note */
+  }
+}
+
 async function refresh() {
   if (!session) return show("pair-screen");
   try {
@@ -201,6 +225,7 @@ async function refresh() {
     }
     drawFeed(feed);
     show("feed-screen");
+    refreshDigest(feed.events.length);
   } catch {
     /* offline for a moment: try again on the next tick */
   }

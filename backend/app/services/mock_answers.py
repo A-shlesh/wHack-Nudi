@@ -65,3 +65,50 @@ def answer(question: str, page: PageSnapshot) -> str:
     if _is_about(q, ["when", "due", "last date", "date", "deadline"]):
         return _answer_due_date(text)
     return f"Sorry, I am not sure. {_HELP}"
+
+
+# ---------------------------------------------------------------------------
+# "Explain this" without AI: a small glossary of words that confuse people
+# ---------------------------------------------------------------------------
+
+_GLOSSARY = {
+    "otp": "An OTP is a one-time code sent to your phone to confirm it is really you. Never tell it to anyone, not even someone who says they are from the bank.",
+    "kyc": "KYC means 'Know Your Customer': your bank checking your identity. Banks never ask you to update KYC through a link or a phone call. Visit the branch instead.",
+    "cvv": "The CVV is the 3-digit number on the back of your card. Never share it with anyone.",
+    "upi pin": "Your UPI PIN is your secret number for sending money. You never need it to RECEIVE money.",
+    "convenience fee": "A convenience fee is an extra charge for paying online. Check the total before you pay.",
+    "processing fee": "A processing fee is an extra charge added to the price. Check the total before you pay.",
+    "gst": "GST is a government tax added to the price. It is normal on most bills.",
+    "emi": "EMI means paying in monthly parts instead of all at once. It often costs more in total because of interest.",
+    "auto-debit": "Auto-debit means money is taken from your account every month without asking you again. Only allow it if you are sure.",
+    "autopay": "Autopay means money is taken from your account automatically, again and again. Only allow it if you are sure.",
+    "subscription": "A subscription charges you again every month or year until you cancel it.",
+    "protection plan": "A protection plan is an extra you pay for. It is usually optional; you can untick it.",
+    "free trial": "A free trial often starts charging you automatically when it ends. Note the date so you can cancel.",
+    "consumer number": "The consumer number is the ID of your electricity or gas connection. It is printed at the top of your paper bill.",
+    "anydesk": "AnyDesk lets someone else control your computer. Never install it because a caller or a website tells you to.",
+    "refund": "Real refunds never need your OTP or PIN. If someone asks for one to 'send you a refund', it is a scam.",
+}
+
+
+def explain(text: str) -> str:
+    lowered = text.lower()
+    for word, meaning in _GLOSSARY.items():
+        if word in lowered:
+            return meaning
+    return (
+        "I cannot explain this one without my AI helper. If it asks for money, an OTP or a password, "
+        "stop and ask a family member first."
+    )
+
+
+def digest(elder: str, summary: dict) -> str:
+    """The family's weekly note, written from the numbers only."""
+    if summary["tasks_done"] == 0 and summary["scams_blocked"] == 0:
+        return f"{elder} has not used Nudi yet this week. You will see a short note here once they do."
+    parts = [f"{elder} used Nudi for {summary['tasks_done']} task{'s' if summary['tasks_done'] != 1 else ''} this week."]
+    if summary["scams_blocked"]:
+        parts.append(f"Nudi stopped {summary['scams_blocked']} risky payment{'s' if summary['scams_blocked'] != 1 else ''}.")
+    if summary["money_saved"]:
+        parts.append(f"About Rs {summary['money_saved']:,} was saved.")
+    return " ".join(parts)

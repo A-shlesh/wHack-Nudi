@@ -10,10 +10,13 @@ Nudi opens in **Chrome's side panel, next to the website**, and:
 - **Warns about scams and dark patterns**: fake countdowns, prize scams, KYC tricks, items added without asking
 - **"Remove it for me"**: unticks sneaky pre-ticked extras (protection plans, donations) in one tap
 - **Ask Nudi**: "How much do I pay?", "When is it due?", "Is this page safe?" (typed, tapped or spoken)
+- **"Explain this with Nudi"**: select confusing words on any page (KYC, convenience fee, auto-debit), right-click, and get a simple explanation
+- **AI second opinion**: the AI can add scam warnings Nudi's rules missed (marked "AI noticed"), but it can never approve a payment or remove a warning
 - **Talk to Nudi**: "option two", "pay the bill", "read again"
 - **Reads everything aloud**, slowly, with bigger text on request
 - **Always checks before any payment**, whether you tap Nudi's choice or the website's own "Pay" button. On a scam website, payment is **blocked**.
 - **Family Link**: a family member can check payments from their phone. "Ask Sushant first" sends a request with a voice note; Sushant taps **Approve** or **Block**.
+- **Weekly note for the family**: the dashboard shows a short, warm summary of the week ("Ajji used Nudi for 4 tasks; Nudi stopped 1 risky payment…"), written by the AI from the week's numbers
 - **Never sends passwords, OTPs, card numbers or bank details.** Those fields are skipped inside the browser.
 
 > This is a hackathon prototype, not a finished product.
@@ -62,11 +65,19 @@ Nudi opens in **Chrome's side panel, next to the website**, and:
 | Family dashboard | `family-dashboard/` | Plain HTML/CSS/JS, served at `/dashboard/` |
 | AWS | `template.yaml`, `backend/app/lambda_handler.py` | SAM template and Lambda entry point |
 
+## AI: Gemini first, Groq as backup, offline rules last
+
+Nudi tries the AI services in order and skips any without a key: **Gemini** (free tier), then **Groq** (free limits), then **AWS Bedrock** (optional). If none answer, Nudi uses its own offline rules. So the demo never breaks.
+
+The AI is used for: page summaries and choices, extra scam warnings, Ask Nudi, "Explain this", and the family weekly note.
+
+**Human-in-the-loop, rule-based safety.** The AI only *suggests*. The payment check, scam blocking, the website trust check and the privacy filter are fixed rules the AI cannot change: it cannot approve a payment, mark a Pay button as "not a payment", or remove a rule's warning. A person always makes the final call.
+
 ## Mock mode (works with no keys)
 
 Every outside service has a mock. With an empty `.env`:
 
-- **AI**: a rule-based simplifier picks the main buttons, and simple rules answer questions
+- **AI**: a rule-based simplifier picks the main buttons, simple rules answer questions, and a small glossary explains common words
 - **Voice**: the browser's built-in voice (Windows voices work offline)
 - **Family voice note**: the family member's phone reads the note aloud itself
 - **Storage**: a local SQLite file (`backend/nudi.db`)
@@ -156,6 +167,9 @@ Edit `backend/.env`:
 
 | Service | Settings | Notes |
 |---|---|---|
+| Gemini | `GEMINI_API_KEY`, optional `GEMINI_MODEL` | Key from https://aistudio.google.com/apikey. Default model `gemini-3.5-flash-lite`; check which models your free tier includes. |
+| Groq | `GROQ_API_KEY`, optional `GROQ_MODEL` | Key from https://console.groq.com/keys. Default model `openai/gpt-oss-20b`; check your limits at console.groq.com/settings/limits. |
+| Order | `AI_ORDER` | Default `gemini,groq,bedrock`. |
 | AWS Bedrock | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`, **or** `AWS_BEARER_TOKEN_BEDROCK`; `AWS_REGION`; `BEDROCK_MODEL_ID` | Uses the Converse API. In the US use `us.anthropic.claude-haiku-5-5`; from Mumbai use `global.anthropic.claude-haiku-5-5`. Turn on model access in the Bedrock console first. |
 | ElevenLabs | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, optional `ELEVENLABS_MODEL_ID` | Default model `eleven_v4_turbo`. Pick a voice ID from your Voice Library. Also makes the family voice notes. |
 
@@ -219,6 +233,8 @@ This deletes the Lambda function, the API, the logs and the three tables (with t
 - Long numbers, card-like numbers and IFSC codes in page text become `[hidden]`, in the browser **and** again on the server.
 - The address sent to the backend has no query string or `#` part (they can hold login tokens).
 - **Domain check:** only the website's domain name is sent to `rdap.org` to look up its age.
+- **AI:** only text that already went through the privacy filter is sent. On Gemini's **free tier, Google may use what is sent to improve its products**; for real users, use a paid tier or Bedrock.
+- **"Explain this"** sends only the words you selected (up to 500 characters), with private numbers hidden.
 - **Family Link** shares only: a task was started, a warning level was shown, an extra was removed (and the amount saved), a payment help request (website domain, amount, Nudi's reasons), and whether a payment was made or stopped. **Never** the pages visited, page text, or anything typed. The elder must tap **Allow** before anything is shared, sees **Sharing with family: ON**, and can pause sharing at any time.
 - Family Link uses separate secret tokens for the elder and the family member. Pairing codes work once, expire after 10 minutes, and wrong guesses are limited.
 - **Talk** uses Chrome's built-in speech recognition, which sends the audio to Google to turn it into text. It only listens while the Talk button is red.

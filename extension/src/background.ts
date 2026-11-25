@@ -1,15 +1,29 @@
 // Background service worker.
 //   - It is the ONLY part of the extension that talks to the Nudi backend.
 //   - It makes the toolbar icon (and Alt+Shift+N) open Nudi in Chrome's side panel.
+//   - It adds the right-click menu item "Explain this with Nudi".
 
 import { BACKEND_URL } from "./config";
 import { postForJson, postJson } from "./lib/api";
 import { handleFamily } from "./lib/familyClient";
+import { redactText } from "./lib/sanitize";
 import type { BackgroundReply, BackgroundRequest } from "./types";
 
 // Clicking the Nudi icon opens the side panel next to the page.
+// A right-click menu item lets people ask Nudi to explain words they selected.
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
+  chrome.contextMenus.create({ id: "nudi-explain", title: "Explain this with Nudi", contexts: ["selection"] });
+});
+
+// "Explain this with Nudi": open the side panel and leave the selected text for it.
+// Private numbers (OTPs, card numbers) are hidden before anything is stored or sent.
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId !== "nudi-explain" || !info.selectionText || tab?.windowId === undefined) return;
+  chrome.sidePanel.open({ windowId: tab.windowId }).catch(console.error);
+  chrome.storage.session.set({
+    nudiExplain: { text: redactText(info.selectionText).slice(0, 500), title: tab.title ?? "", at: Date.now() },
+  });
 });
 
 // Keyboard shortcut (Alt+Shift+N) opens the side panel for the current window.
@@ -37,6 +51,8 @@ async function handle(request: BackgroundRequest): Promise<unknown> {
       return postForJson("/simplify", request.page);
     case "ask":
       return postForJson("/ask", { question: request.question, page: request.page });
+    case "explain":
+      return postForJson("/explain", { text: request.text, page_title: request.pageTitle });
     case "trust":
       return postForJson("/trust", request.request);
     case "speak": {

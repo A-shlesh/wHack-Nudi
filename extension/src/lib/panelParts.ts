@@ -115,7 +115,10 @@ const LEVEL_ORDER = { danger: 0, caution: 1, info: 2 };
 
 export function buildWarning(warning: PageWarning): HTMLElement {
   const notice = el("div", `notice ${warning.level}`);
-  notice.append(iconSpan(warning.level === "info" ? "info" : "alert", 22), el("div", "", warning.message));
+  const text = el("div", "", warning.message);
+  // Warnings from the AI are marked, so it is clear they are a second opinion.
+  if (warning.source === "ai") text.prepend(el("span", "ai-tag", "AI noticed"));
+  notice.append(iconSpan(warning.level === "info" ? "info" : "alert", 22), text);
   return notice;
 }
 

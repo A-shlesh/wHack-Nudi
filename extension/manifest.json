@@ -34,7 +34,7 @@
       "description": "Open Nudi next to this page"
     }
   },
-  "permissions": ["sidePanel", "activeTab", "scripting", "storage"],
+  "permissions": ["sidePanel", "activeTab", "scripting", "storage", "contextMenus"],
   "host_permissions": [
     "http://localhost:8787/*",
     "https://*.execute-api.ap-south-1.amazonaws.com/*"

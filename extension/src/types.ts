@@ -22,18 +22,27 @@ export interface Action {
 export interface PageWarning {
   level: "info" | "caution" | "danger";
   message: string;
+  source?: "rules" | "ai"; // "ai" = an extra warning from the AI, on top of Nudi's rules
 }
+
+/** Which AI answered. "mock" = Nudi's offline rules. */
+export type AiMode = "gemini" | "groq" | "bedrock" | "mock";
 
 export interface SimplifyResponse {
   summary: string;
   actions: Action[];
   warnings: PageWarning[];
-  mode: "bedrock" | "mock";
+  mode: AiMode;
 }
 
 export interface AskResponse {
   answer: string;
-  mode: "bedrock" | "mock";
+  mode: AiMode;
+}
+
+export interface ExplainResponse {
+  explanation: string;
+  mode: AiMode;
 }
 
 // ---------- Domain trust check ----------
@@ -80,6 +89,7 @@ export type ApprovalStatus = "pending" | "approved" | "blocked";
 export type BackgroundRequest =
   | { type: "simplify"; page: PageSnapshot }
   | { type: "ask"; question: string; page: PageSnapshot }
+  | { type: "explain"; text: string; pageTitle: string }
   | { type: "trust"; request: TrustRequest }
   | { type: "speak"; text: string }
   | { type: "health" }

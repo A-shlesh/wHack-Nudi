@@ -33,7 +33,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from .services import voice
+from .services import ai_features, voice
 from .storage import Storage, make_storage
 from . import domain_trust
 from .trust.domains import registrable_domain
@@ -423,3 +423,31 @@ def feed(family_id: str, family: dict = Depends(helper_family)):
         ],
         "summary": weekly_summary(events),
     }
+
+
+# ---------------------------------------------------------------------------
+# Weekly digest: a short AI-written note for the family member
+# ---------------------------------------------------------------------------
+
+DIGEST_CACHE_SECONDS = 30 * 60
+# family id -> (time written, number of events then, digest, mode)
+_digests: dict[str, tuple[float, int, str, str]] = {}
+
+
+@router.get("/family/{family_id}/digest")
+def digest(family_id: str, family: dict = Depends(helper_family)):
+    """Written from the week's numbers and event sentences only (no page content exists to leak).
+    Rewritten at most every 30 minutes, or sooner when new events arrive."""
+    if family["family_id"] != family_id:
+        raise HTTPException(403, "Not your family")
+    events = storage().list_events(family_id) if family["status"] == "paired" else []
+    cached = _digests.get(family_id)
+    if cached and cached[1] == len(events) and _now() - cached[0] < DIGEST_CACHE_SECONDS:
+        return {"digest": cached[2], "mode": cached[3]}
+
+    elder, helper = family["elder_name"], family["family_name"] or "you"
+    week = [e for e in events if _now() - e["at"] < WEEK_SECONDS]
+    highlights = [describe(e, elder, helper)[1] for e in week]
+    text, mode = ai_features.weekly_digest(elder, helper, weekly_summary(events), highlights)
+    _digests[family_id] = (_now(), len(events), text, mode)
+    return {"digest": text, "mode": mode}

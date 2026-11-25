@@ -38,13 +38,14 @@ class PageWarning(BaseModel):
 
     level: Literal["info", "caution", "danger"]
     message: str
+    source: Literal["rules", "ai"] = "rules"  # Nudi's own rules, or an extra AI warning
 
 
 class SimplifyResponse(BaseModel):
     summary: str  # one or two short sentences: "This page lets you ..."
     actions: list[Action]
     warnings: list[PageWarning]
-    mode: Literal["bedrock", "mock"]  # shows whether real AI was used
+    mode: Literal["gemini", "groq", "bedrock", "mock"]  # which AI answered ("mock" = offline rules)
 
 
 class AskRequest(BaseModel):
@@ -56,7 +57,19 @@ class AskRequest(BaseModel):
 
 class AskResponse(BaseModel):
     answer: str
-    mode: Literal["bedrock", "mock"]
+    mode: Literal["gemini", "groq", "bedrock", "mock"]
+
+
+class ExplainRequest(BaseModel):
+    """Text the user selected on a page and asked Nudi to explain."""
+
+    text: str = Field(min_length=1, max_length=500)
+    page_title: str = Field(default="", max_length=200)
+
+
+class ExplainResponse(BaseModel):
+    explanation: str
+    mode: Literal["gemini", "groq", "bedrock", "mock"]
 
 
 class SpeakRequest(BaseModel):

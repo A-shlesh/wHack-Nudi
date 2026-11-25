@@ -8,8 +8,8 @@
 # is not hosted in Mumbai itself, but it can be called FROM Mumbai through the
 # "global" cross-region inference profile (global.anthropic.claude-haiku-5-5).
 #
-# Secrets (the ElevenLabs key) are passed at deploy time as a NoEcho
-# parameter. They are never written in this file or in the repo.
+# Secrets (Gemini, Groq and ElevenLabs keys) are passed at deploy time as NoEcho
+# parameters. They are never written in this file or in the repo.
 # Deploy:  see "Deploy to AWS" in README.md.
 
 AWSTemplateFormatVersion: "2010-09-09"
@@ -17,6 +17,16 @@ Transform: AWS::Serverless-2016-10-31
 Description: Nudi backend - web helper for elderly users (FastAPI on Lambda)
 
 Parameters:
+  GeminiApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Main AI (Gemini). Leave empty to skip it.
+  GroqApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Backup AI (Groq). Leave empty to skip it.
   BedrockModelId:
     Type: String
     Default: global.anthropic.claude-haiku-5-5
@@ -63,6 +73,8 @@ Resources:
           FAMILIES_TABLE: !Ref FamiliesTable
           EVENTS_TABLE: !Ref EventsTable
           APPROVALS_TABLE: !Ref ApprovalsTable
+          GEMINI_API_KEY: !Ref GeminiApiKey
+          GROQ_API_KEY: !Ref GroqApiKey
           BEDROCK_MODEL_ID: !Ref BedrockModelId
           ELEVENLABS_API_KEY: !Ref ElevenLabsApiKey
           ELEVENLABS_VOICE_ID: !Ref ElevenLabsVoiceId

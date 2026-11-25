@@ -36,6 +36,10 @@ let currentTabId: number | null = null;
 let familySharing: boolean | null = null; // for the header badge
 let lastSpokenUrl = "";
 let lastTaskSite = ""; // send "task started" once per website, not on every page
+// The current "Ask a question" section, so a right-click "Explain this" can use it.
+let currentAsk: { fold: HTMLDetailsElement; box: AskBox } | null = null;
+
+const AI_NAMES: Record<string, string> = { gemini: "Gemini AI", groq: "Groq AI", bedrock: "AWS Bedrock AI" };
 
 // ---------- Talking to the page ----------
 
@@ -117,6 +121,8 @@ function render(read: PageReadResult, result: SimplifyResponse, trust: TrustResu
   });
   if (result.actions.length === 0) body.append(el("p", "muted", "I could not find clear actions on this page."));
   body.append(choices);
+  // Say who chose these: the AI, or Nudi's own offline rules.
+  body.append(el("p", "ai-note", AI_NAMES[result.mode] ? `Choices picked with help from ${AI_NAMES[result.mode]}.` : "Choices picked by Nudi's offline rules."));
 
   // 2. Fixes: shown open, because they are something Nudi can DO for you.
   read.fixes.forEach((message, index) =>
@@ -137,6 +143,7 @@ function render(read: PageReadResult, result: SimplifyResponse, trust: TrustResu
   const askFold = buildFold("Ask a question", false);
   askFold.body.append(askBox.element);
   body.append(askFold.fold);
+  currentAsk = { fold: askFold.fold, box: askBox };
 
   // 4. Family (folded; it opens by itself when someone asks to connect)
   body.append(buildFamilySection(onFamilyChange));
@@ -152,7 +159,26 @@ function render(read: PageReadResult, result: SimplifyResponse, trust: TrustResu
 
   panel.append(body, controls);
   app.replaceChildren(panel);
+  checkExplainRequest();
 }
+
+// ---------- "Explain this with Nudi" (right-click menu) ----------
+
+/** The background worker leaves the selected text in session storage; show it here. */
+async function checkExplainRequest(): Promise<void> {
+  if (!currentAsk) return;
+  const { nudiExplain } = await chrome.storage.session.get("nudiExplain");
+  const request = nudiExplain as { text: string; title: string; at: number } | undefined;
+  if (!request || Date.now() - request.at > 60_000) return; // old requests are ignored
+  await chrome.storage.session.remove("nudiExplain");
+  currentAsk.fold.open = true;
+  currentAsk.fold.scrollIntoView({ behavior: "smooth", block: "start" });
+  currentAsk.box.explain(request.text, request.title);
+}
+
+chrome.storage.session.onChanged.addListener((changes) => {
+  if (changes.nudiExplain?.newValue) checkExplainRequest();
+});
 
 /** Act on spoken words such as "option two", "pay", "read again", or a question. */
 function handleSpoken(said: string, result: SimplifyResponse, askBox: AskBox): void {

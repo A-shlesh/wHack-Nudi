@@ -5,6 +5,7 @@ Endpoints:
   GET  /health    -> is the server up, and which services are real or mock
   POST /simplify  -> page summary in, Action View (summary, big buttons, warnings) out
   POST /ask       -> a question about the page in, a short plain answer out
+  POST /explain   -> selected text in, a simple explanation out
   POST /trust     -> a website address in, a trust score with simple reasons out
   POST /speak     -> text in, MP3 audio out (or 204 = "use the browser voice")
   GET  /demo/     -> fake demo websites for testing the extension
@@ -27,13 +28,15 @@ from .domain_trust import check_trust
 from .schemas import (
     AskRequest,
     AskResponse,
+    ExplainRequest,
+    ExplainResponse,
     PageSnapshot,
     SimplifyResponse,
     SpeakRequest,
     TrustRequest,
     TrustResponse,
 )
-from .services import bedrock_ai, mock_ai, mock_answers, voice
+from .services import ai_features, voice
 
 app = FastAPI(title="Nudi backend")
 
@@ -61,9 +64,11 @@ app.mount("/dashboard", StaticFiles(directory=_static_folder("family-dashboard")
 
 @app.get("/health")
 def health():
+    providers = config.ai_providers()
     return {
         "status": "ok",
-        "ai": "bedrock" if config.USE_REAL_BEDROCK else "mock",
+        "ai": providers[0] if providers else "mock",
+        "ai_backups": providers[1:],
         "voice": "elevenlabs" if config.USE_REAL_ELEVENLABS else "browser",
     }
 
@@ -80,17 +85,7 @@ def _clean(page: PageSnapshot) -> None:
 @app.post("/simplify", response_model=SimplifyResponse)
 def simplify(page: PageSnapshot):
     _clean(page)
-
-    mode = "mock"
-    if config.USE_REAL_BEDROCK:
-        try:
-            summary, actions = bedrock_ai.simplify(page)
-            mode = "bedrock"
-        except Exception as error:  # any failure -> keep the demo running with mock
-            print(f"Bedrock failed, using mock instead: {error}")
-            summary, actions = mock_ai.simplify(page)
-    else:
-        summary, actions = mock_ai.simplify(page)
+    summary, actions, ai_warnings, mode = ai_features.simplify(page)
 
     # Never trust the AI alone about money. The AI may rename "Pay ₹5000" to "Finish",
     # so we check the ORIGINAL label of the page element too, not just the new label.
@@ -100,20 +95,24 @@ def simplify(page: PageSnapshot):
         if is_payment_label(action.label) or is_payment_label(original):
             action.is_payment = True
 
-    return SimplifyResponse(summary=summary, actions=actions, warnings=check_page(page), mode=mode)
+    # Nudi's own rules always run. The AI can only ADD warnings on top of them.
+    rule_warnings = check_page(page)
+    known = {w.message for w in rule_warnings}
+    warnings = rule_warnings + [w for w in ai_warnings if w.message not in known]
+    return SimplifyResponse(summary=summary, actions=actions, warnings=warnings, mode=mode)
 
 
 @app.post("/ask", response_model=AskResponse)
 def ask(request: AskRequest):
     _clean(request.page)
-    question = redact(request.question)
+    answer, mode = ai_features.answer(redact(request.question), request.page)
+    return AskResponse(answer=answer, mode=mode)
 
-    if config.USE_REAL_BEDROCK:
-        try:
-            return AskResponse(answer=bedrock_ai.answer(question, request.page), mode="bedrock")
-        except Exception as error:  # any failure -> keep the demo running with mock
-            print(f"Bedrock failed, using mock instead: {error}")
-    return AskResponse(answer=mock_answers.answer(question, request.page), mode="mock")
+
+@app.post("/explain", response_model=ExplainResponse)
+def explain(request: ExplainRequest):
+    explanation, mode = ai_features.explain(redact(request.text), redact(request.page_title))
+    return ExplainResponse(explanation=explanation, mode=mode)
 
 
 @app.post("/trust", response_model=TrustResponse)

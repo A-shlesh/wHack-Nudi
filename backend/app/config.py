@@ -13,7 +13,25 @@ from dotenv import load_dotenv
 # Load backend/.env (if it exists) into environment variables.
 load_dotenv()
 
-# --- AWS Bedrock (the AI model that simplifies pages) ---
+
+
+def _key(name: str) -> str:
+    """Read a key; the placeholders in .env.example ("your-...-here") count as no key."""
+    value = os.getenv(name, "").strip()
+    return "" if value.startswith("your-") else value
+
+
+# --- Gemini (main AI, has a free tier) and Groq (free backup AI) ---
+GEMINI_API_KEY = _key("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "")
+GROQ_API_KEY = _key("GROQ_API_KEY")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "")
+
+# Which AI to try first, second, third. Any without a key is skipped.
+# If none work, Nudi uses its own offline rules (mock mode).
+AI_ORDER = [name.strip() for name in os.getenv("AI_ORDER", "gemini,groq,bedrock").split(",") if name.strip()]
+
+# --- AWS Bedrock (optional third AI) ---
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "")
 
@@ -21,6 +39,16 @@ BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "")
 _has_aws_keys = bool(os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
 _has_bedrock_key = bool(os.getenv("AWS_BEARER_TOKEN_BEDROCK"))
 USE_REAL_BEDROCK = bool(BEDROCK_MODEL_ID) and (_has_aws_keys or _has_bedrock_key)
+
+
+def ai_providers() -> list[str]:
+    """The AI services that are set up, in the order to try them. Empty = offline mode."""
+    ready = {
+        "gemini": bool(GEMINI_API_KEY),
+        "groq": bool(GROQ_API_KEY),
+        "bedrock": USE_REAL_BEDROCK,
+    }
+    return [name for name in AI_ORDER if ready.get(name)]
 
 # --- ElevenLabs (natural voice) ---
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")

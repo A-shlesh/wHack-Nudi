@@ -310,6 +310,15 @@ export const STYLES = `
   .waiting { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
   .waiting h2 { margin: 0; }
 
+  /* AI features */
+  .ai-note { margin: 10px 0 0; font-size: 14px; color: var(--ink-2); }
+  .ai-tag {
+    display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px; vertical-align: 1px;
+    font-size: 12px; font-weight: 700; background: var(--brand-tint); color: var(--brand);
+  }
+  .answer-quote { margin: 6px 0 8px; padding-left: 10px; border-left: 3px solid var(--line-strong); color: var(--ink-2); font-style: italic; }
+  .ask-tip { margin: 12px 0 0; font-size: 14px; color: var(--ink-2); }
+
   @keyframes fade-up { from { opacity: 0; transform: translateY(6px); } }
 
   @media (prefers-reduced-motion: reduce) {
