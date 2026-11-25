@@ -21,6 +21,7 @@ import { buildFamilySection } from "./lib/familyPanel";
 import { addHistory, applyTrusted, getTrusted } from "./lib/history";
 import { buildHistorySection } from "./lib/historyPanel";
 import { askBackground } from "./lib/messages";
+import { basicModeAnswer } from "./lib/offline";
 import { cachePage, getCachedPage, pageKey } from "./lib/pageCache";
 import { buildChoice, buildFix, buildFold, buildHeader, buildVerdict, buildVoiceQuestion } from "./lib/panelParts";
 import { getSettings, loadSettings, saveSettings } from "./lib/settings";
@@ -109,7 +110,8 @@ function spokenText(result: SimplifyResponse, trust: TrustResult | null): string
   return parts.join(" ");
 }
 
-function render(read: PageReadResult, result: SimplifyResponse, trust: TrustResult | null): void {
+/** basicMode = true when the helper server is off and the answer was made in the browser. */
+function render(read: PageReadResult, result: SimplifyResponse, trust: TrustResult | null, basicMode = false): void {
   applyTextSize(app);
   const panel = el("div", "panel docked");
   panel.append(buildHeader(familySharing));
@@ -117,6 +119,16 @@ function render(read: PageReadResult, result: SimplifyResponse, trust: TrustResu
   // Only the verdict and the choices are open. Everything else is folded,
   // so the panel is not a wall of text.
   const body = el("div", "body");
+
+  if (basicMode) {
+    const banner = el("div", "basic-banner");
+    banner.setAttribute("role", "status");
+    banner.append(
+      el("strong", "", "Basic mode: the Nudi helper is off."),
+      el("span", "", " Payments are still checked. The website check, questions and Family need the helper."),
+    );
+    body.append(banner);
+  }
 
   // A right-click "Explain this" answer, if there is one, stays on top.
   body.append(explainSlot());
@@ -350,9 +362,15 @@ async function analyze({ quiet = false, fresh = false } = {}): Promise<void> {
       speak(spokenText(result, trust));
     }
   } catch {
+    // The helper server is off: still help, with the simple rules inside the browser.
     window.clearTimeout(loading);
-    if (myRun === analyzing) {
-      showMessage("Nudi cannot connect", "The Nudi helper server is not running. Please start it, then try again.");
+    if (myRun !== analyzing) return;
+    const result = basicModeAnswer(read.page);
+    await sendToPage({ type: "nudi:set-trust", trust: null, decision: result.decision }).catch(() => {});
+    render(read, result, null, true);
+    if (!quiet && read.page.url !== lastSpokenUrl) {
+      lastSpokenUrl = read.page.url;
+      speak(spokenText(result, null));
     }
   }
 }

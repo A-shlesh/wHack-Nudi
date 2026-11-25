@@ -403,8 +403,41 @@ export function clickApproved(element: HTMLElement): void {
   delete element.dataset.nudiApproved;
 }
 
-/** Watch every click on the page and stop payment clicks until the user says yes. */
+/** The words on a submit button, or its icon's description if it has no words. */
+function submitLabel(button: HTMLElement | null): string {
+  return button ? visibleLabel(button) : "";
+}
+
+/** Watch every click and every form sent on the page, and stop payments until the user says yes. */
 export function installPageGuard(): void {
+  // Forms sent with the Enter key never "click" the Pay button, so watch the send itself.
+  document.addEventListener(
+    "submit",
+    (event) => {
+      const form = event.target as HTMLFormElement;
+      const submitter =
+        (event as SubmitEvent).submitter ??
+        form.querySelector<HTMLElement>("button:not([type=button]):not([type=reset]), input[type=submit], input[type=image]");
+      // Already approved (the person said Yes to this very button or form).
+      if (form.dataset.nudiApproved === "yes" || submitter?.dataset.nudiApproved === "yes") return;
+
+      const label = submitLabel(submitter);
+      if (!looksLikePayment(label)) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      confirmPayment(label).then((yes) => {
+        if (!yes) return;
+        form.dataset.nudiApproved = "yes";
+        // Send it again, the way the page meant to, now that the person agreed.
+        if (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) form.requestSubmit(submitter);
+        else form.requestSubmit();
+        delete form.dataset.nudiApproved;
+      });
+    },
+    true,
+  );
+
   document.addEventListener(
     "click",
     (event) => {

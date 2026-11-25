@@ -23,6 +23,10 @@ export function visibleLabel(element: HTMLElement): string {
     (element as HTMLInputElement).value ||
     element.getAttribute("aria-label") ||
     element.getAttribute("title") ||
+    // Icon-only buttons: the picture's description, or the icon's title.
+    element.querySelector("img[alt]")?.getAttribute("alt") ||
+    element.querySelector("svg title")?.textContent ||
+    (element as HTMLInputElement).alt ||
     "";
   return text.replace(/\s+/g, " ").trim();
 }

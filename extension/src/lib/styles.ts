@@ -318,6 +318,12 @@ export const STYLES = `
   .voice-question-title { display: flex; align-items: center; gap: 10px; font-size: calc(20px * var(--scale)); font-weight: 700; color: var(--brand); }
   .voice-question p { margin: 6px 0 12px; }
 
+  /* Basic mode (helper server off) */
+  .basic-banner {
+    margin-bottom: 14px; padding: 12px 14px; border-radius: 10px; font-size: calc(16px * var(--scale));
+    background: var(--warn-tint); border: 2px solid var(--warn-line); color: var(--ink);
+  }
+
   /* AI features */
   .ai-note { margin: 10px 0 0; font-size: 14px; color: var(--ink-2); }
   .ai-tag {
