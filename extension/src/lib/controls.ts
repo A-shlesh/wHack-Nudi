@@ -26,6 +26,7 @@ export function buildControls(options: ControlsOptions): HTMLElement {
 
   // --- Read aloud / Stop reading ---
   const read = iconButton("btn primary", "speaker", "Read aloud");
+  read.dataset.voiceControl = "yes"; // handles its own on/off; a click here is not "stop everything"
   let speaking = false;
   watchSpeaking((isSpeaking) => {
     speaking = isSpeaking;

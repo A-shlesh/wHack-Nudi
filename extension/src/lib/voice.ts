@@ -31,21 +31,42 @@ export function stopSpeaking(): void {
 
 // A random name for this voice (one in the side panel, one in each page).
 const VOICE_ID = Math.random().toString(36).slice(2);
+// When this voice last started talking. A "be quiet" message sent BEFORE that
+// (it can arrive late) must not cut off the newer sentence.
+let startedAt = 0;
 
-/** Tell the other Nudi voices "I am talking now", so they go quiet. */
+/** Tell the other Nudi voices "be quiet now" (because this one starts, or the person clicked). */
 function claimTheVoice(): void {
   try {
-    chrome.runtime.sendMessage({ type: "voice:claim", id: VOICE_ID }).catch(() => {});
+    chrome.runtime.sendMessage({ type: "voice:claim", id: VOICE_ID, at: Date.now() }).catch(() => {});
   } catch {
     /* the extension was reloaded: nothing to tell */
   }
 }
 
-// When another Nudi voice starts talking, this one stops.
-chrome.runtime.onMessage.addListener((message: { type?: string; id?: string }) => {
-  if (message?.type === "voice:claim" && message.id !== VOICE_ID) stopSpeaking();
+// When another Nudi voice starts talking (or the person clicked there), this one stops.
+chrome.runtime.onMessage.addListener((message: { type?: string; id?: string; at?: number }) => {
+  if (message?.type === "voice:claim" && message.id !== VOICE_ID && (message.at ?? Date.now()) >= startedAt) {
+    stopSpeaking();
+  }
   return false;
 });
+
+// The person clicked a button or link: they are busy doing something, so all
+// Nudi voices stop. The button can then say its own short reply ("Okay…").
+// The Read aloud / Stop reading button is marked data-voice-control and
+// handles itself, so it can still turn reading on and off.
+document.addEventListener(
+  "click",
+  (event) => {
+    const target = event.target as Element | null;
+    const pressed = target?.closest?.("button, a, [role=button], input[type=submit], input[type=button], summary");
+    if (!pressed || pressed.closest("[data-voice-control]")) return;
+    stopSpeaking();
+    claimTheVoice();
+  },
+  true, // "capture": runs before the button's own action, which may start a new sentence
+);
 
 // Clearest voices first. Chrome's "Google" voices sound the most natural (they
 // need internet); the Microsoft ones work offline. "Microsoft Heera" (Indian
@@ -99,6 +120,7 @@ export async function speak(text: string): Promise<void> {
 export async function speakAlways(text: string): Promise<void> {
   stopSpeaking();
   claimTheVoice();
+  startedAt = Date.now();
   const myTurn = speechTurn;
   onSpeakingChange(true);
   try {
