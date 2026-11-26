@@ -40,7 +40,7 @@ Nudi also works on normal websites (try a shop product page), except Chrome's ow
 | **Fake website check:** 9 days old, copies the BESCOM name, trust 0/100 | **"Explain this with Nudi"**: right-click any confusing words |
 
 <p align="center"><img src="docs/images/nudi-family-dashboard.png" alt="Family dashboard on a phone: payment request with Approve and Block, and the weekly note" width="320"></p>
-<p align="center"><b>Family Link:</b> Sushant gets the request on his phone with Nudi's reasons and a voice note, and taps <b>Approve</b> or <b>Block</b>.</p>
+<p align="center"><b>Family Link:</b> Sushant gets the request on his phone with the amount and Nudi's reasons, and taps <b>Approve</b> or <b>Block</b>.</p>
 
 ## Why rule-based and human-in-the-loop
 
@@ -63,7 +63,7 @@ The AI only **suggests**: summaries, choices, extra warnings, explanations. The 
 - **Your money, your choice**: on a blocked or risky page there is a small **"I understand the risk. Let me pay anyway."** Nudi reads the reasons again, says "if someone on the phone is telling you to pay, hang up", waits **15 seconds**, and then the button must be **held for 3 seconds**. The family is told afterwards.
 - **"I think this website is fine"**: undo a wrong warning. With Family Link, Sushant checks it on his phone (**Yes, it is fine** / **No, keep warning**). Without Family Link, you can do it yourself on a "Be careful" website; a scam-level website always needs a family member.
 - **What Nudi stopped**: a list of every scam website seen, every payment stopped and every "pay anyway", with the reasons and a risk level (High risk / Some risk). Kept on this computer only.
-- **Family Link**: a family member can check payments and websites from their phone. "Ask Sushant first" sends a request with a voice note; Sushant taps **Approve** or **Block**.
+- **Family Link**: a family member can check payments and websites from their phone. "Ask Sushant first" sends a request (amount, website, reasons) to his phone, which buzzes; Sushant reads it and taps **Approve** or **Block**. The dashboard is silent on purpose: family members read it.
 - **Weekly note for the family**: the dashboard shows a short, warm summary of the week ("Ajji used Nudi for 4 tasks; Nudi stopped 1 risky payment…"), written by the AI from the week's numbers
 - **Never sends passwords, OTPs, card numbers or bank details.** Those fields are skipped inside the browser.
 
@@ -147,7 +147,6 @@ Every outside service has a mock. With an empty `.env`:
 
 - **AI**: a rule-based simplifier picks the main buttons, simple rules answer questions, and a small glossary explains common words
 - **Voice**: the browser's built-in voice (Windows voices work offline)
-- **Family voice note**: the family member's phone reads the note aloud itself
 - **Storage**: a local SQLite file (`backend/nudi.db`)
 
 The domain age check uses the free RDAP service and needs internet. Offline, Nudi says "I couldn't check how old this website is".
@@ -213,7 +212,7 @@ npm run build
 2. On a phone or a second browser window, open the dashboard (see below), type a name and the code, and tap **Connect**.
 3. Nudi asks **"Sushant wants to connect. Allow?"**. Tap **Allow**. The header shows **Sharing with family: ON**.
 4. On the scam page tap Pay, then **Ask Sushant first**. Nudi shows and says **"Waiting for Sushant…"**.
-5. The dashboard shows the request: amount, website, Nudi's reasons, **Play voice note**, **Approve** / **Block**.
+5. The dashboard shows the request: amount, website, Nudi's reasons, **Approve** / **Block**.
 6. Tap **Block**. Nudi says **"Sushant said no… No money was spent."** The dashboard's weekly strip shows the payment stopped and the money saved.
 7. Under the verdict, tap **I think this website is fine**, then **Ask Sushant**. The dashboard shows **Ajji thinks this website is fine** with **Yes, it is fine** / **No, keep warning**. Tap **Yes**: within a few seconds Nudi shows the website as safe, with "Sushant checked this website and said it is fine." Undo it any time under **What Nudi stopped → Websites marked as fine → Warn me again**.
 
@@ -250,7 +249,7 @@ Edit `backend/.env`:
 | Groq | `GROQ_API_KEY`, optional `GROQ_MODEL` | Key from https://console.groq.com/keys. Default model `qwen/qwen3.8-27b` (fastest and best in our tests, about 2–3 s per answer); check your limits at console.groq.com/settings/limits. |
 | Order | `AI_ORDER` | Default `ollama,gemini,groq,bedrock`. |
 | AWS Bedrock | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`, **or** `AWS_BEARER_TOKEN_BEDROCK`; `AWS_REGION`; `BEDROCK_MODEL_ID` | Optional. Uses the Converse API. Set `BEDROCK_MODEL_ID` to a model or inference profile your AWS account can use, and turn on model access in the Bedrock console first. |
-| ElevenLabs | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, optional `ELEVENLABS_MODEL_ID` | Default model `eleven_v4_turbo`. Pick a voice ID from your Voice Library. Also makes the family voice notes. |
+| ElevenLabs | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, optional `ELEVENLABS_MODEL_ID` | Default model `eleven_v4_turbo`. Pick a voice ID from your Voice Library. |
 
 If a real service fails at runtime, Nudi quietly falls back to mock mode, so the demo keeps running.
 

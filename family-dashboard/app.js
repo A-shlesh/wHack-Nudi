@@ -84,29 +84,11 @@ function iconEl(name) {
   return box;
 }
 
-// ---------- Voice note ----------
-
-async function playVoiceNote(approval) {
-  if (approval.has_voice) {
-    const response = await api(`/approvals/${approval.id}/voice`);
-    if (response.status === 200) {
-      const audio = new Audio(URL.createObjectURL(await response.blob()));
-      audio.play();
-      return;
-    }
-  }
-  // Mock mode (no ElevenLabs key): the phone reads the note with its own voice.
-  speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(approval.voice_text);
-  utterance.lang = "en-IN";
-  speechSynthesis.speak(utterance);
-}
-
 // ---------- Approvals ----------
 
 // Two kinds of request: "payment" (may I pay?) and "site" (I think this website is fine).
 const decided = new Map(); // approval id -> { decision, kind } (shown for a while)
-const announced = new Set(); // approvals we already buzzed / spoke for
+const announced = new Set(); // approvals we already buzzed for (the dashboard never speaks: family members read it)
 
 const DECIDED_TEXT = {
   payment: {
@@ -151,15 +133,13 @@ function approvalCard(approval, elderName) {
     approval.reasons.forEach((reason) => list.append(el("li", "", reason)));
     card.append(list);
   }
-  const voice = el("button", "btn voice", "▶ Play voice note");
-  voice.onclick = () => playVoiceNote(approval);
   const approve = el("button", "btn approve", isSite ? "Yes, it is fine" : "Approve");
   const block = el("button", "btn block", isSite ? "No, keep warning" : "Block");
   approve.onclick = () => decide(approval, "approved");
   block.onclick = () => decide(approval, "blocked");
   const buttons = el("div", "buttons");
   buttons.append(approve, block);
-  card.append(voice, buttons);
+  card.append(buttons);
   return card;
 }
 
@@ -185,8 +165,7 @@ function drawFeed(feed) {
     approvals.append(approvalCard(approval, feed.elder_name));
     if (!announced.has(approval.id)) {
       announced.add(approval.id);
-      navigator.vibrate?.([200, 100, 200]);
-      playVoiceNote(approval).catch(() => {}); // may need a tap first on some phones
+      navigator.vibrate?.([200, 100, 200]); // a silent buzz so a new request is noticed
     }
   }
 
